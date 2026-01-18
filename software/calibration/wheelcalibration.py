@@ -301,9 +301,7 @@ def make_an_estimation_of_forces_moments(
     )
     force_application_point[2] = h
     force_application_point = np.transpose(force_application_point)
-
     ref_grav = np.transpose(np.mean(trial["IMU"]["Acc"], axis=0))
-
     ref_grav = (ref_grav - acc_bias) / np.linalg.norm(ref_grav - acc_bias)
 
     f1 = -1 * trial["Mass"] * 9.81 * np.dot(wheel_ref[:3, :3], ref_grav)
