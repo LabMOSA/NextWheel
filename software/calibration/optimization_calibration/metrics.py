@@ -65,6 +65,7 @@ def R2_per_axis(Y: np.ndarray, Y_pred: np.ndarray, eps: float = 1e-12) -> np.nda
 def R2_total(Y: np.ndarray, Y_pred: np.ndarray, eps: float = 1e-12) -> float:
     """
     Compute the total R-squared (R²) between true and predicted values.
+
     Parameters
     ----------
     Y : np.ndarray
