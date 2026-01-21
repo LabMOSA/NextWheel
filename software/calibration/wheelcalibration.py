@@ -300,7 +300,10 @@ def make_an_estimation_of_forces_moments(
         0.5 * d * np.sin(np.pi * trial["Degree"] / 180)
     )
     force_application_point[2] = h
+    # print(f"orce_application_point: {force_application_point}")
     force_application_point = np.transpose(force_application_point)
+    # print(f"force_application_point (transposed): {force_application_point}")
+
     ref_grav = np.transpose(np.mean(trial["IMU"]["Acc"], axis=0))
     ref_grav = (ref_grav - acc_bias) / np.linalg.norm(ref_grav - acc_bias)
 

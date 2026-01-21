@@ -65,7 +65,7 @@ def read_mass_degree_from_calib_files(
 
 ROOT = Path(__file__).resolve().parent
 path = str(ROOT) + "/"
-trials_dir = "vertical_final/"
+trials_dir = "package_trials_good/mass_7_5_P3"
 rows = read_mass_degree_from_calib_files(path + trials_dir)
 for r in rows:
     print(r)
