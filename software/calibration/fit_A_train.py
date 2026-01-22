@@ -1,33 +1,18 @@
+from typing import Sequence
+
 import numpy as np
 import kineticstoolkit as ktk
 from pathlib import Path
-import wheelcalibration as wc
-from cross_validation import load_force_trials, train_test_split_trials
-from calculate_base_AccBias import load_fixed_imu_params
+import software.calibration.wheelcalibration as wc
+from software.calibration.cross_validation import load_force_trials, train_test_split_trials
+from software.calibration.calculate_base_AccBias import load_fixed_imu_params
 
-def build_FMs_Channels(force_trials: list[dict], acc_bias: np.ndarray, base: np.ndarray):
+def build_FMs_Channels(force_trials: Sequence[dict], acc_bias: np.ndarray, base: np.ndarray)-> tuple[np.ndarray, np.ndarray]:
     FMs, Channels = [], []
     for t in force_trials:
-        # print(f"\nProcessing trial: {t['__file__']}")
         fm = wc.make_an_estimation_of_forces_moments(t, acc_bias, base)
-        # Fx, Fy, Fz = fm[0], fm[1], fm[2]
-        # phi_deg = (np.degrees(np.arctan2(Fy, Fx)) + 360) % 360
-        # print("phi (deg) =", phi_deg)
-        # theta1 = (phi_deg + 90) % 360
-        # theta2 = (phi_deg - 90) % 360
-        # print("Degrees à tester:", theta1, theta2)
-
-        # print(f"Trial {t['__file__']} -> Estimated FM: {fm}")
         ch = np.median(t["Analog"]["Force"], axis=0)
-        # print(f"Trial {t['__file__']} -> Channel (median Analog Force): {ch}")
-        F = np.asarray(t["Analog"]["Force"])
-        # print("median:", np.median(F, axis=0))
-        # print("std:", F.std(axis=0))
-        # print("ptp:", np.ptp(F, axis=0))
-
         FMs.append(fm)
-
-
         Channels.append(ch)
     return np.vstack(FMs), np.vstack(Channels)
 
@@ -126,6 +111,7 @@ def main():
     # ---- 6) Fit A
     A = fit_A(train, acc_bias, base)
     print("\nA shape:", A.shape)
+    print(A)
     assert A.shape == (6, 6), "Expected A to be 6x6"
 
     # ---- 7) Evaluate

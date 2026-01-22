@@ -2,6 +2,7 @@ from __future__ import annotations
 import numpy as np
 from .types import InfluenceConfig, InfluenceResult
 
+
 def compute_predictions(
     X: np.ndarray, A: np.ndarray, b0: np.ndarray | None = None
 ) -> np.ndarray:
@@ -28,6 +29,8 @@ def compute_predictions(
     if b0 is not None:
         Y_hat += b0[None, :]
     return Y_hat
+
+
 def compute_residuals(Y: np.ndarray, Y_pred: np.ndarray) -> np.ndarray:
     """
     Compute residuals between true and predicted values.
@@ -45,7 +48,9 @@ def compute_residuals(Y: np.ndarray, Y_pred: np.ndarray) -> np.ndarray:
         Residuals, shape (n_samples, n_axes).
     """
     return Y_pred - Y
-def compute_H(X: np.ndarray, XtX_inv: np.ndarray) -> np.ndarray:
+
+
+def compute_H(X: np.ndarray) -> np.ndarray:
     """
     Compute hat matrix H from design matrix X and (X^T X)^-1.
 
@@ -54,15 +59,16 @@ def compute_H(X: np.ndarray, XtX_inv: np.ndarray) -> np.ndarray:
     X : np.ndarray
         Design matrix, shape (n_samples, n_predictors).
 
-    XtX_inv : np.ndarray
-        Inverse of (X^T X), shape (n_predictors, n_predictors).
-
     Returns
     -------
     np.ndarray
         Hat matrix H, shape (n_samples, n_samples).
     """
+    XtX = X.T @ X
+    XtX_inv = np.linalg.pinv(XtX)
     return X @ XtX_inv @ X.T
+
+
 def compute_leverage(H: np.ndarray) -> np.ndarray:
     """
     Return leverage values h_ii from the hat matrix H.
@@ -81,6 +87,7 @@ def compute_leverage(H: np.ndarray) -> np.ndarray:
     if H.ndim != 2 or H.shape[0] != H.shape[1]:
         raise ValueError(f"H must be square (n,n). Got shape {H.shape}.")
     return np.diag(H)
+
 
 def compute_denom_from_leverage(h: np.ndarray, epsilon: float = 1e-12) -> np.ndarray:
     """
@@ -103,6 +110,7 @@ def compute_denom_from_leverage(h: np.ndarray, epsilon: float = 1e-12) -> np.nda
     denom = np.maximum(denom, epsilon)
     return denom
 
+
 def compute_loo_residuals(E: np.ndarray, denom: np.ndarray) -> np.ndarray:
     """
     Compute leave-one-out (LOO) residuals.
@@ -121,6 +129,8 @@ def compute_loo_residuals(E: np.ndarray, denom: np.ndarray) -> np.ndarray:
         LOO residuals, shape (n_samples, n_axes).
     """
     return E / denom[:, None]
+
+
 def compute_U(X: np.ndarray, use_pseudo_inverse: bool = True) -> np.ndarray:
     """
     Compute matrix U from design matrix X.
@@ -145,18 +155,19 @@ def compute_U(X: np.ndarray, use_pseudo_inverse: bool = True) -> np.ndarray:
         XtX_inv = np.linalg.inv(XtX)
     return (XtX_inv @ X.T).T
 
+
 def compute_deltaA_Frobenius(
     U: np.ndarray, E: np.ndarray, denom: np.ndarray
 ) -> np.ndarray:
-    """
-    """
+    """ """
     N = E.shape[0]
     deltaA_Frobenius = np.empty(N, dtype=float)
     for i in range(N):
         deltaB = -np.outer(U[i], E[i]) / denom[i]
         deltaA = deltaB.T
-        deltaA_Frobenius[i] = np.linalg.norm(deltaA, 'fro')
+        deltaA_Frobenius[i] = np.linalg.norm(deltaA, "fro")
     return deltaA_Frobenius
+
 
 def compute_cook_like(
     E: np.ndarray,
@@ -194,9 +205,13 @@ def compute_cook_like(
     tuple[np.ndarray, np.ndarray]
         Cook's distance per axis and combined.
     """
-    cook = (E**2) / (p * (mse[None, :] + epsilon)) * (h[:, None] / (denom[:, None] ** 2))
+    cook = (
+        (E**2) / (p * (mse[None, :] + epsilon)) * (h[:, None] / (denom[:, None] ** 2))
+    )
     cook_combined = np.mean(cook, axis=1)
     return cook, cook_combined
+
+
 def compute_mse_per_axis(E: np.ndarray, dof: int, eps: float = 1e-12) -> np.ndarray:
     """
     Compute mean squared error (MSE) per axis with numerical stability.
@@ -216,6 +231,8 @@ def compute_mse_per_axis(E: np.ndarray, dof: int, eps: float = 1e-12) -> np.ndar
     """
     mse = np.sum(E**2, axis=0) / max(dof, 1)
     return np.where(mse > eps, mse, eps)
+
+
 def influence_analytic(
     X: np.ndarray,
     Y: np.ndarray,
@@ -244,27 +261,27 @@ def influence_analytic(
 
     # 3) leverage + denom
     h = compute_leverage(H)
-    denom = compute_denom_from_leverage(h, epsilon = cfg.epsilon)
+    denom = compute_denom_from_leverage(h, epsilon=cfg.epsilon)
 
     # 4) LOO residuals
     E_loo = compute_loo_residuals(E, denom)
 
     # 5) ΔA score
     U = compute_U(X)
-    deltaA_frob = compute_deltaA_Frobenius(E, U, denom)
+    deltaA_Frobenius = compute_deltaA_Frobenius(E, U, denom)
 
     # 6) Cook-like
     dof = max(N - p, 1)
-    mse = compute_mse_per_axis(E, dof=dof, eps=cfg.eps)
+    mse = compute_mse_per_axis(E, dof=dof, eps=cfg.epsilon)
     cook_per_axis, cook_combined = compute_cook_like(
-        E=E, h=h, denom=denom, p=p, mse=mse, eps=cfg.eps
+        E=E, h=h, denom=denom, p=p, mse=mse, epsilon=cfg.epsilon
     )
 
     return InfluenceResult(
         leverage=h,
         residuals=E,
         loo_residuals=E_loo,
-        deltaA_frob=deltaA_frob,
+        delta_A_Frobenius = deltaA_Frobenius,
         cook_per_axis=cook_per_axis,
         cook_combined=cook_combined,
     )

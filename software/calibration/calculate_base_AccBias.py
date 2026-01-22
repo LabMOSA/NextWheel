@@ -3,7 +3,7 @@ from pathlib import Path
 import re
 import numpy as np
 import kineticstoolkit as ktk
-import wheelcalibration as wc
+import software.calibration.wheelcalibration as wc
 
 
 def latest_by_prefix(folder: Path, prefix: str, n: int = 1) -> list[Path]:
