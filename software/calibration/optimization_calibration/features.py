@@ -86,3 +86,25 @@ def build_XY_core(
 
 def build_XY(trials: Sequence[dict], acc_bias, base, normalize_y=None):
     return build_XY_core(trials, acc_bias, base, builder=build_FMs_Channels, normalize_y=normalize_y)
+
+# def _call_build_XY(
+#     trials: Sequence[dict],
+#     acc_bias: np.ndarray,
+#     base: np.ndarray,
+#     normalize_y,
+# ):
+#     """
+#     Your build_XY evolved in your project.
+#     This helper supports two signatures:
+#       - (X, Y_scaled)
+#       - (X, Y_scaled, y_scale)
+#     """
+#     out = build_XY(trials, acc_bias, base, normalize_y=normalize_y)
+#     if isinstance(out, tuple) and len(out) == 3:
+#         X, Y, y_scale = out
+#     elif isinstance(out, tuple) and len(out) == 2:
+#         X, Y = out
+#         y_scale = np.ones(Y.shape[1], dtype=float)
+#     else:
+#         raise TypeError("build_XY must return (X, Y) or (X, Y, y_scale)")
+#     return np.asarray(X, float), np.asarray(Y, float), np.asarray(y_scale, float)

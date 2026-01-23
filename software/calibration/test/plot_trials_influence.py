@@ -9,7 +9,6 @@ csv_path = out_dir / "trial_ranking.csv"
 
 df = pd.read_csv(csv_path)
 
-# Option: crée un label lisible
 def make_label(row):
     mass = row.get("Mass")
     deg = row.get("Degree")
@@ -19,7 +18,7 @@ def make_label(row):
 df["label"] = df.apply(make_label, axis=1)
 
 # ----------------------------
-# 1) Top-K barplot (scores)
+# 1) Top-K ballot (scores)
 # ----------------------------
 K = 15
 top = df.sort_values("score", ascending=False).head(K).iloc[::-1]  # reverse for nicer horizontal bars
@@ -49,7 +48,7 @@ y = df["deltaA_frob"].to_numpy()
 s = df["loo_rmse"].to_numpy()
 lev = df["leverage"].to_numpy()
 
-# taille des points: rescale pour voir quelque chose
+
 s_scaled = 30 + 300 * (s - np.nanmin(s)) / (np.nanmax(s) - np.nanmin(s) + 1e-12)
 
 plt.figure()

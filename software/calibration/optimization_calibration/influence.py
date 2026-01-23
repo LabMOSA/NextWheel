@@ -245,7 +245,7 @@ def influence_analytic(
       - leverage
       - residuals
       - loo_residuals
-      - deltaA_frob
+      - deltaA_Frobenius
       - cook_per_axis / cook_combined
     """
     X = np.asarray(X, float)

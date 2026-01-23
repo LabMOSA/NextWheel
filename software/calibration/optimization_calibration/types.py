@@ -66,12 +66,54 @@ class FitResult:
     b0: Optional[np.ndarray]
     B: np.ndarray
 
+
 @dataclass
 class ReportRow:
     idx: int
     score: float
-    deltaA_frob: float
+    deltaA_Frobenius: float
     cook: float
     loo_rmse: float
     leverage: float
     meta: dict[str, Any]
+
+@dataclass
+class ProtocolEval:
+    name: str
+    n_total: int
+    n_train: int
+    n_test: int
+
+    rmse_total: float
+    r2_total: float
+    rmse_per_axis: list[float]
+    r2_per_axis: list[float]
+
+    # Stability (bootstrap)
+    A_std_mean: float
+    A_std_max: float
+    A_cv_mean: float
+    A_cv_max: float
+
+    # Influence summary (optional)
+    influence_top_score: float | None
+    influence_top_idx: int | None
+    influence_top_file: str | None
+
+    # Debug/info
+    notes: str = ""
+
+@dataclass(frozen=True)
+class ProtocolSpec:
+    name: str
+    masses: tuple[Any, ...] | None = None
+    degrees: tuple[Any, ...] | None = None
+    positions: tuple[Any, ...] | None = None
+    max_per_condition: int | None = None  # limit repeats per (mass, degree, position) condition
+    min_trials: int = 6  # must have at least 6 trials to fit a 6x6 matrix
+
+    def describe(self) -> str:
+        return (
+            f"{self.name} | masses={self.masses} degrees={self.degrees} "
+            f"positions={self.positions} max_per_condition={self.max_per_condition}"
+        )
