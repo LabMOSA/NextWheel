@@ -28,8 +28,8 @@ from software.calibration.optimization_calibration.report import rank_trials, ex
 # Paths / data loading
 # ----------------------------
 path = Path(__file__).resolve().parent.parent          # ../calibration
-imu_dir = path / "E1_E2"
-packages_root = path / "package_trials_good"          # attention au nom exact du dossier
+imu_dir = path / "Base_AccBias_nicolas"
+packages_root = path / "trials_forces_nicolas"          # attention au nom exact du dossier
 trials = load_force_trials(packages_root)
 
 base, acc_bias, imu_info = load_fixed_imu_params(imu_dir)

@@ -117,3 +117,19 @@ class ProtocolSpec:
             f"{self.name} | masses={self.masses} degrees={self.degrees} "
             f"positions={self.positions} max_per_condition={self.max_per_condition}"
         )
+
+dataclass(frozen=True)
+class ProtocolSpecZone:
+    name: str
+    masses: tuple[Any, ...] | None = None
+    degrees: tuple[Any, ...] | None = None
+    positions: tuple[Any, ...] | None = None
+    max_per_condition: int | None = None  # limit repeats per (mass, degree, position) condition
+    min_trials: int = 6  # must have at least 6 trials to fit a 6x6 matrix
+    zone_bins: int = 6
+
+    def describe(self) -> str:
+        return (
+            f"{self.name} | masses={self.masses} degrees={self.degrees} "
+            f"positions={self.positions} max_per_condition={self.max_per_condition}"
+        )

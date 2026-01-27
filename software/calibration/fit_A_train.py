@@ -11,7 +11,9 @@ def build_FMs_Channels(force_trials: Sequence[dict], acc_bias: np.ndarray, base:
     FMs, Channels = [], []
     for t in force_trials:
         fm = wc.make_an_estimation_of_forces_moments(t, acc_bias, base)
+        # print(f"Trial {t['__file__']}: Estimated FM = {fm}")
         ch = np.median(t["Analog"]["Force"], axis=0)
+        # print(f"Trial {t['__file__']}: Channel   = {ch}")
         FMs.append(fm)
         Channels.append(ch)
     return np.vstack(FMs), np.vstack(Channels)
@@ -74,7 +76,7 @@ def main():
     # ---- 1) Paths
     path = Path(__file__).resolve().parent
     imu_dir = path / "E1_E2"
-    forces_root = path / "package_trials_good"
+    forces_root = path / "position_2"
 
     # ---- 2) Load fixed IMU params
     base, acc_bias, imu_info = load_fixed_imu_params(imu_dir)

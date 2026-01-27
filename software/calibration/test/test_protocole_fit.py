@@ -29,6 +29,7 @@ print("Top protocols:")
 for score, ev in best:
     print(score, ev.name, ev.n_total, ev.rmse_total, ev.A_cv_mean)
 
+print(best)
 # ----------------------------
 # Plots on top protocols
 # ----------------------------

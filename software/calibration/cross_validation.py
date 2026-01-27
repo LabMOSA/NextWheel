@@ -72,7 +72,7 @@ def check_split(trials, train, test):
     print("Masses in TEST :", summarize_masses(test))
 
 if __name__ == "__main__":
-    packages_root = Path(__file__).resolve().parent / "packages_trials"
+    packages_root = Path(__file__).resolve().parent / "2_planes_optimization_trials"
     trials = load_force_trials(packages_root)
     for trial in trials:
         print(f"Package: {trial['__package__']}, File: {trial['__file__']}, Mass: {trial['Mass']}, Degree: {trial['Degree']}")
