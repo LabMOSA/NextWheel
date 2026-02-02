@@ -36,6 +36,17 @@ def RMSE_total(Y: np.ndarray, Y_pred: np.ndarray) -> float:
         Total RMSE.
     """
     err = Y_pred - Y
+    print(err)
+    print(np.mean(err**2))
+    return float(np.sqrt(np.mean(err**2)))
+
+def RMSE_total_strict(Y: np.ndarray, Y_pred: np.ndarray) -> float:
+    if not np.isfinite(Y).all():
+        raise ValueError("Y contains NaN/Inf")
+    if not np.isfinite(Y_pred).all():
+        bad = np.argwhere(~np.isfinite(Y_pred))
+        raise ValueError(f"Y_pred contains NaN/Inf, first bad at row,col={bad[0].tolist()}")
+    err = Y_pred - Y
     return float(np.sqrt(np.mean(err**2)))
 
 # R-squared (R²) metrics
@@ -83,7 +94,7 @@ def R2_total(Y: np.ndarray, Y_pred: np.ndarray, eps: float = 1e-12) -> float:
     ss_res_total = float(np.sum(err**2))
     ss_tot_total = float(np.sum((Y - np.mean(Y, axis=0))**2))
 
-    return float(1.0 - ss_res_total / ss_tot_total) if ss_tot_total > eps else float("nan")
+    return float(1.0 - ss_res_total / ss_tot_total) if ss_tot_total > eps else float("na")
 
 def nrmse_per_axis(Y: np.ndarray, Y_pred: np.ndarray) -> np.ndarray:
     """

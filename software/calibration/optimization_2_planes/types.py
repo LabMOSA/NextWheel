@@ -7,6 +7,7 @@ BuildXYFn = Callable[
 ]
 
 
+
 @dataclass(frozen=True)
 class NormalizeConfig:
     enabled: bool = True
@@ -41,6 +42,26 @@ class TwoPlaneProtocolSpec:
             f"{self.name} | masses={self.masses} degrees={self.degrees} "
             f"positions={self.positions} max_per_condition={self.max_per_condition}"
         )
+
+@dataclass(frozen=True)
+class FitConfig:
+    method: str = "ols"
+    intercept: bool = False
+    alpha_ridge: float = 1e-6
+
+
+@dataclass
+class FitResult:
+    A: np.ndarray
+    b0: Optional[np.ndarray]
+    B: np.ndarray
+
+@dataclass
+class FitResultTwoPlanes:
+    A_full: np.ndarray
+    b0_full: Optional[np.ndarray]
+    res_plane_A: FitResult
+    res_plane_B: FitResult
 
 @dataclass(frozen=True)
 class MonteCarloConfig:
@@ -91,20 +112,6 @@ class MonteCarloResult:
     A_mean: np.ndarray
     A_std: np.ndarray
     A_samples: np.ndarray
-
-
-@dataclass(frozen=True)
-class FitConfig:
-    method: str = "ols"
-    intercept: bool = False
-    alpha_ridge: float = 1e-6
-
-
-@dataclass
-class FitResult:
-    A: np.ndarray
-    b0: Optional[np.ndarray]
-    B: np.ndarray
 
 
 @dataclass

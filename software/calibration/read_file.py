@@ -9,7 +9,7 @@ import kineticstoolkit as ktk
 
 def _suffix_number(name: str) -> int:
     """
-    Extrait le numéro à la fin du nom (ex: ForcesForCalibrationMatrix12 -> 12).
+    Extrait le numéro à la fin du nom (ex: ForcesForCalibrationMatrix7 -> 12).
     Si aucun numéro, retourne -1.
     """
     m = re.search(r"(\d+)$", name)
@@ -27,7 +27,7 @@ def read_mass_degree_from_calib_files(
 
     Retour:
         [
-          {"file": "ForcesForCalibrationMatrix0", "trial": 0, "Mass": 2.0, "Degree": 90.0},
+          {"file": "ForcesForCalibrationMatrix6", "trial": 0, "Mass": 2.0, "Degree": 90.0},
           ...
         ]
     """
@@ -65,14 +65,14 @@ def read_mass_degree_from_calib_files(
 
 ROOT = Path(__file__).resolve().parent
 path = str(ROOT) + "/"
-trials_dir = "package_trials_good/mass_3_03_Z-"
+trials_dir = "package_trials_good/mass_FxFz_1_73"
 rows = read_mass_degree_from_calib_files(path + trials_dir)
 for r in rows:
     print(r)
 
 
 def _suffix_number(name: str) -> int:
-    """Extrait le numéro à la fin du nom (ex: ForcesForCalibrationMatrix12 -> 12)."""
+    """Extrait le numéro à la fin du nom (ex: ForcesForCalibrationMatrix7 -> 12)."""
     m = re.search(r"(\d+)$", name)
     return int(m.group(1)) if m else -1
 

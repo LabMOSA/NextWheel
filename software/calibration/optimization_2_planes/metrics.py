@@ -59,9 +59,9 @@ def R2_per_axis(Y: np.ndarray, Y_pred: np.ndarray, eps: float = 1e-12) -> np.nda
     err = Y_pred - Y
     ss_res = np.sum(err**2, axis=0)
     ss_tot = np.sum((Y - np.mean(Y, axis=0))**2, axis=0)
-
     # Avoid division by zero if an axis is (nearly) constant
     return np.where(ss_tot > eps, 1.0 - ss_res / ss_tot, np.nan)
+
 def R2_total(Y: np.ndarray, Y_pred: np.ndarray, eps: float = 1e-12) -> float:
     """
     Compute the total R-squared (R²) between true and predicted values.

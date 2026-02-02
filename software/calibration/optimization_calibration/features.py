@@ -88,10 +88,6 @@ def build_XY(trials: Sequence[dict], acc_bias, base, normalize_y=None):
 
 
 def position_from_imu_gravity(trial: dict) -> str | None:
-    """
-    Retourne une étiquette de pose IMU basée sur la direction de g.
-    Exemple: 'X+', 'X-', 'Y+', 'Y-', 'Z+', 'Z-'
-    """
     # À adapter selon ta structure exacte
     # Exemples possibles: trial["IMU"]["Acc"], trial["Analog"]["Acc"], etc.
     acc = None
@@ -107,7 +103,8 @@ def position_from_imu_gravity(trial: dict) -> str | None:
     if acc is None:
         return None
 
-    acc = np.asarray(acc, float)  # shape (T,3) idéalement
+    acc = np.asarray(acc, float)  # shape (T,3)
+    print(acc)
     if acc.ndim != 2 or acc.shape[1] != 3:
         return None
 

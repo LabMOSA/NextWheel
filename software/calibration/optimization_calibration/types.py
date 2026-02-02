@@ -58,6 +58,7 @@ class FitConfig:
     method: str = "ols"
     intercept: bool = False
     alpha_ridge: float = 1e-6
+    normalize: NormalizeConfig = NormalizeConfig()
 
 
 @dataclass

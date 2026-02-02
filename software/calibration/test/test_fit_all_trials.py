@@ -28,37 +28,26 @@ trials = load_force_trials(packages_root)
 
 base, acc_bias, imu_info = load_fixed_imu_params(imu_dir)
 
-# ----------------------------
-# Train/test split
-# ----------------------------
-train, test = train_test_split_trials(trials, test_ratio=0.2, seed=42, stratify_by_mass=True)
-
-# ----------------------------
-# Build raw X/Y (no scaling inside)
 # IMPORTANT: we want to control scaling ourselves to avoid leakage
 # ----------------------------
 X_all, Y_all, _ = build_XY(trials, acc_bias, base, normalize_y=None)
-X_train, Y_train, _ = build_XY(train, acc_bias, base, normalize_y=None)
-X_test, Y_test, _ = build_XY(test, acc_bias, base, normalize_y=None)
 
 # ----------------------------
 # Compute y_scale on TRAIN ONLY
 # ----------------------------
 # Example: std scaling (recommended)
 # If you already have NormalizeConfig, use it here. Otherwise:
-y_scale = np.std(Y_train, axis=0)
+y_scale = np.std(Y_all, axis=0)
 y_scale = np.where(y_scale < 1e-12, 1.0, y_scale)
 
 # Normalize targets using the SAME scale
-Y_train_n = Y_train / y_scale[None, :]
-Y_test_n  = Y_test  / y_scale[None, :]
 Y_all_n   = Y_all   / y_scale[None, :]
 
 # ----------------------------
 # Fit in normalized space
 # ----------------------------
 fit_configuration = FitConfig(method="ols", intercept=False)
-results = fit(X_train, Y_train_n, fit_configuration)
+results = fit(X_all, Y_all_n, fit_configuration)
 
 A = results.A
 b0 = getattr(results, "b0", None)
@@ -73,11 +62,9 @@ def predict_Y(X: np.ndarray) -> np.ndarray:
         Yp = Yp + b0[None, :]
     return Yp
 
-Y_pred_test_n = predict_Y(X_test)
 Y_pred_all_n  = predict_Y(X_all)
 
 # DE-normalize
-Y_pred_test = Y_pred_test_n * y_scale[None, :]
 Y_pred_all  = Y_pred_all_n  * y_scale[None, :]
 
 # ----------------------------
@@ -134,8 +121,8 @@ print("R2 axes   :", r2_per_axis)
 # ----------------------------
 # Plots (physical units)
 # ----------------------------
-plot_pred_vs_true(Y_test, Y_pred_test, title_prefix="Calibration — Test (denorm)", split_forces_moments=True)
-plot_residuals(Y_test, Y_pred_test, title_prefix="Calibration — Test (denorm)", split_forces_moments=True)
+plot_pred_vs_true(Y_all, Y_pred_all, title_prefix="Calibration — Test (denorm)", split_forces_moments=True)
+plot_residuals(Y_all, Y_pred_all, title_prefix="Calibration — Test (denorm)", split_forces_moments=True)
 plt.show()
 
 # ----------------------------
