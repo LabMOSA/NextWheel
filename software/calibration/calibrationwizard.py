@@ -799,7 +799,7 @@ if __name__ == "__main__":
     nw = nextwheel.NextWheel(ip)
     ROOT = Path(__file__).resolve().parent
     path = str(ROOT) + "/"
-    trials_dir = "package_trials_good/Fx"  # pas besoin de / final
+    trials_dir = "position_2/Fz"  # pas besoin de / final
 
 # # %% Part 1 - Z-axis calculated from gyroscope
 #

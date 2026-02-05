@@ -163,17 +163,28 @@ def get_worst_residual_trials_safe(
         results.append((int(i), float(residuals[i]), float(y_true[i, axis]), float(y_pred[i, axis]), trials[i]))
     return results
 
-worst_fy = get_worst_residual_trials_safe(
+worst_mx = get_worst_residual_trials_safe(
     y_true=Y_all,
     y_pred=Y_pred_all,
     trials=trials,
-    axis= 1,
+    axis= 3,
     top_k=10,
 )
 
-for i, r, yt, yp, trial in worst_fy:
+worst_my = get_worst_residual_trials_safe(
+    y_true=Y_all,
+    y_pred=Y_pred_all,
+    trials=trials,
+    axis= 4,
+    top_k=10,
+)
+for i, r, yt, yp, trial in worst_mx:
     print(f"Trial {trial['__file__']}")
-    print(f"Trial {i:3d} | Fy true = {yt:7.2f} | Fy pred = {yp:7.2f} | residual = {r:7.2f}")
+    print(f"Trial {i:3d} | Mx true = {yt:7.2f} | Mx pred = {yp:7.2f} | residual = {r:7.2f}")
+
+for i, r, yt, yp, trial in worst_my:
+    print(f"Trial {trial['__file__']}")
+    print(f"Trial {i:3d} | My true = {yt:7.2f} | My pred = {yp:7.2f} | residual = {r:7.2f}")
 
 y_true_f, y_pred_f, trials_f, removed = remove_outliers_by_residual(
     y_true=Y_all,

@@ -5,6 +5,7 @@ import re
 from typing import List, Dict, Any, Union, Optional
 
 import kineticstoolkit as ktk
+import numpy as np
 
 
 def _suffix_number(name: str) -> int:
@@ -65,7 +66,7 @@ def read_mass_degree_from_calib_files(
 
 ROOT = Path(__file__).resolve().parent
 path = str(ROOT) + "/"
-trials_dir = "package_trials_good/mass_FxFz_1_73"
+trials_dir = "position_2/Fz_ccw"
 rows = read_mass_degree_from_calib_files(path + trials_dir)
 for r in rows:
     print(r)
@@ -327,7 +328,105 @@ def update_degree_cw_to_ccw_in_calib_files(
     return logs
 
 
-# ROOT = Path(__file__).resolve().parent
+
+def update_degree_swap_values_in_calib_files(
+    folder: Union[str, Path],
+    *,
+    prefix: str = "ForcesForCalibrationMatrix",
+    only_trials: Optional[List[int]] = None,
+    out_folder: Optional[Union[str, Path]] = None,
+    overwrite: bool = False,
+    create_backup: bool = True,
+    degree_key: str = "Degree",
+    modulo: float = 360.0,
+    a: float = 0.0,
+    b: float = 240.0,
+    tol: float = 1e-6,
+) -> List[Dict[str, Any]]:
+    """
+    Échange deux valeurs d'angle (par défaut 0 <-> 240) dans des fichiers de calibration.
+
+    - Si Degree ≈ a  -> remplace par b
+    - Si Degree ≈ b  -> remplace par a
+    - Sinon, laisse inchangé
+
+    Les degrés sont normalisés modulo `modulo` avant comparaison.
+
+    Retourne une liste de logs.
+    """
+    folder = Path(folder)
+    if not folder.exists():
+        raise FileNotFoundError(f"Dossier introuvable: {folder}")
+
+    files = _list_trial_files(folder, prefix)
+    if not files:
+        raise FileNotFoundError(f"Aucun fichier '{prefix}*' trouvé dans {folder}")
+
+    out_dir = folder if out_folder is None else Path(out_folder)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    inplace = out_dir.resolve() == folder.resolve()
+    only_set = set(only_trials) if only_trials is not None else None
+
+    # normalise a,b dans [0, modulo)
+    a_n = a % modulo
+    b_n = b % modulo
+
+    logs: List[Dict[str, Any]] = []
+
+    for fp in files:
+        trial = _suffix_number(fp.name)
+        if only_set is not None and trial not in only_set:
+            continue
+
+        data = ktk.load(str(fp))
+        if degree_key not in data:
+            raise KeyError(
+                f"{fp.name}: clé '{degree_key}' absente. Clés: {list(data.keys())}"
+            )
+
+        old_deg = float(data[degree_key])
+        d = old_deg % modulo  # normalisation
+
+        # swap avec tolérance
+        if np.isclose(d, a_n, atol=tol, rtol=0.0):
+            new_deg = b_n
+        elif np.isclose(d, b_n, atol=tol, rtol=0.0):
+            new_deg = a_n
+        else:
+            new_deg = d  # ou old_deg si tu veux garder la valeur non normalisée
+
+        # Backup si écriture en place
+        if inplace and create_backup:
+            bak = fp.with_suffix(fp.suffix + ".bak")
+            if not bak.exists():
+                bak.write_bytes(fp.read_bytes())
+
+        data[degree_key] = new_deg
+
+        out_path = out_dir / fp.name
+        if out_path.exists() and not overwrite:
+            raise FileExistsError(
+                f"Le fichier cible existe déjà: {out_path}. "
+                f"Met overwrite=True ou change out_folder."
+            )
+
+        ktk.save(str(out_path), data)
+
+        logs.append(
+            {
+                "file": fp.name,
+                "trial": trial,
+                "old_degree": old_deg,
+                "new_degree": new_deg,
+                "output_path": str(out_path),
+            }
+        )
+
+    return logs
+
+
+ROOT = Path(__file__).resolve().parent
 # logs = update_mass_in_calib_files(
 #     ROOT / "vertical",
 #     new_mass=1.73,
@@ -335,9 +434,14 @@ def update_degree_cw_to_ccw_in_calib_files(
 #     overwrite=True,
 # )
 # logs = update_degree_cw_to_ccw_in_calib_files(
-#     ROOT / "vertical_mass_updated",
-#     out_folder=ROOT / "vertical_final",
+#     ROOT / "position_2" / "Fz",
+#     out_folder=ROOT / "position_2" / "Fz_ccw",
 #     overwrite=True,
 # )
+logs =  update_degree_swap_values_in_calib_files(
+    ROOT / "position_2" / "Fz",
+    out_folder=ROOT / "position_2" / "Fz_swaped",
+    overwrite=True,
+)
 # for l in logs:
 #     print(l)

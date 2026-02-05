@@ -17,6 +17,7 @@ from software.calibration.optimization_calibration.fit import fit
 from software.calibration.optimization_calibration.metrics import (
     RMSE_total, R2_total, RMSE_per_axis, R2_per_axis
 )
+from software.calibration.optimization_calibration.protocole import cap_trials_per_zone_and_mass
 
 # ----------------------------
 # Paths / data loading
@@ -189,3 +190,37 @@ def print_removed_outliers(removed, y_true, y_pred, trials, top=50):
         )
 
 print_removed_outliers(removed, Y_all, Y_pred_all, trials, top=30)
+
+# --- Select ONCE ---
+seed = 42
+selected_trials = cap_trials_per_zone_and_mass(
+    trials=list(trials),
+    X=X_all,
+    k_per_key=1,
+    mass_fn=lambda t: t["Mass"],   # adapte si besoin
+    seed=seed,
+    n_bins=6,
+    zone_id=None,
+)
+
+# --- Build X for SELECTED trials ---
+X_sel, _, _ = build_XY(selected_trials, acc_bias, base)
+X_sel = np.asarray(X_sel, float)
+
+print(f"Total trials: {len(trials)}")
+print(f"Selected trials: {len(selected_trials)}")
+
+# --- 6 graphs: one per channel (hist overlay) ---
+axis_names = ["Ch0", "Ch1", "Ch2", "Ch3", "Ch4", "Ch5"]  # renomme si tu veux
+
+for j in range(6):
+    plt.figure()
+    plt.hist(X_all[:, j], bins=40, density=True, alpha=0.5, label="All trials")
+    plt.hist(X_sel[:, j], bins=40, density=True, alpha=0.5, label="Selected trials")
+    plt.title(f"Distribution of X channel {j} ({axis_names[j]})")
+    plt.xlabel("Value")
+    plt.ylabel("Density")
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+

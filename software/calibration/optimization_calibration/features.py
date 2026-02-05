@@ -1,8 +1,5 @@
 from typing import Sequence
-
 import numpy as np
-
-
 from software.calibration.optimization_calibration.types import (
     NormalizeConfig,
     BuildXYFn,
