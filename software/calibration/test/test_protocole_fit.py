@@ -18,7 +18,6 @@ path = Path(__file__).resolve().parent.parent          # ../calibration
 imu_dir = path / "E1_E2"
 packages_root = path / "package_trials_good"          # attention au nom exact du dossier
 trials = load_force_trials(packages_root)
-
 base, acc_bias, imu_info = load_fixed_imu_params(imu_dir)
 
 best, candidates = recommend_protocol(trials, acc_bias, base, fit_cfg, mc_cfg, out_dir=Path(__file__).resolve().parent)

@@ -3,14 +3,12 @@ import numpy as np
 
 AXES_6 = ("Fx", "Fy", "Fz", "Mx", "My", "Mz")
 
-
 def make_edges_uniform(min_val: float, max_val: float, n_bins: int) -> np.ndarray:
     """Bins uniformes sur une plage physique (recommandé)."""
     if n_bins < 1:
         raise ValueError("n_bins must be >= 1")
     # n_bins bins => n_bins+1 edges
     return np.linspace(float(min_val), float(max_val), int(n_bins) + 1)
-
 def zone_id_from_Y_ranges(
     Y: np.ndarray,
     edges_per_axis: Sequence[np.ndarray],
@@ -46,7 +44,6 @@ def zone_id_from_Y_ranges(
         mult *= s
 
     return zone
-
 def make_edges_quantile(y: np.ndarray, n_bins: int) -> np.ndarray:
     """Bins par quantiles (utile si tu veux équilibrer les counts)."""
     y = np.asarray(y, float).ravel()
@@ -58,8 +55,6 @@ def make_edges_quantile(y: np.ndarray, n_bins: int) -> np.ndarray:
         v = float(y[0]) if y.size else 0.0
         return np.array([v - 1.0, v + 1.0], float)
     return edges
-
-
 def coverage_1d_counts(Y: np.ndarray, edges_per_axis) -> dict[str, np.ndarray]:
     """Retourne le comptage par bin sur chaque axe (diagnostic)."""
     Y = np.asarray(Y, float)
@@ -71,7 +66,6 @@ def coverage_1d_counts(Y: np.ndarray, edges_per_axis) -> dict[str, np.ndarray]:
         counts = np.bincount(z, minlength=edges.size - 1)
         out[AXES_6[ax]] = counts
     return out
-
 def y_key_from_tolerances(Y: np.ndarray, tol: np.ndarray) -> np.ndarray:
     Y = np.asarray(Y, float)
     tol = np.asarray(tol, float).ravel()
@@ -85,7 +79,6 @@ def y_key_from_tolerances(Y: np.ndarray, tol: np.ndarray) -> np.ndarray:
 
     keys = [tuple(map(int, row)) for row in Q]
     return np.array(keys, dtype=object)
-
 def y_key_from_relative_tolerances(
     Y: np.ndarray,
     pct: np.ndarray,        # ex: [0.05,...] (5%)
@@ -122,7 +115,6 @@ def default_score_fn(X: np.ndarray, idxs: np.ndarray) -> np.ndarray:
     Xs = (Xs - mu) / sd
 
     return np.linalg.norm(Xs[idxs], axis=1)
-
 def counts_per_axis_bin(Y, edges_per_axis, axes=None):
     Y = np.asarray(Y, float)
     if axes is None:
@@ -137,7 +129,6 @@ def counts_per_axis_bin(Y, edges_per_axis, axes=None):
         counts = np.bincount(z, minlength=len(edges) - 1)
         out[ax] = counts  # counts[k] = nb essais dans le bin k
     return out
-
 def cap_trials_per_zone_mass_and_Y_ranges_no_pca(
     trials: list[dict],
     X: np.ndarray,
@@ -273,7 +264,6 @@ def cap_trials_per_zone_mass_and_Y_ranges_no_pca(
 
         # 1) dédoublonnage dans le bucket
         if y_keys is not None:
-            print("salut lapin")
             groups: dict[tuple[int, ...], list[int]] = {}
             for i in idxs.tolist():
                 k = tuple(np.asarray(y_keys[i]).ravel().astype(int).tolist())
