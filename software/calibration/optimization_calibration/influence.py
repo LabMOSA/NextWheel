@@ -3,7 +3,7 @@ from .types import InfluenceConfig, InfluenceResult
 
 
 def compute_predictions(
-    X: np.ndarray, A: np.ndarray, b0: np.ndarray | None = None
+        X: np.ndarray, A: np.ndarray, b0: np.ndarray | None = None
 ) -> np.ndarray:
     """
     Compute predicted values Y_pred from design matrix X and coefficients A.
@@ -88,7 +88,7 @@ def compute_leverage(H: np.ndarray) -> np.ndarray:
     return np.diag(H)
 
 
-def compute_denom_from_leverage(h: np.ndarray, epsilon: float = 1e-12) -> np.ndarray:
+def compute_denominator_from_leverage(h: np.ndarray, epsilon: float = 1e-12) -> np.ndarray:
     """
     Compute denominator values (1 - h) with numerical stability.
 
@@ -105,12 +105,12 @@ def compute_denom_from_leverage(h: np.ndarray, epsilon: float = 1e-12) -> np.nda
     np.ndarray
         Denominator values (1 - h), shape (n_samples,).
     """
-    denom = 1.0 - h
-    denom = np.maximum(denom, epsilon)
-    return denom
+    denominator = 1.0 - h
+    denominator = np.maximum(denominator, epsilon)
+    return denominator
 
 
-def compute_loo_residuals(E: np.ndarray, denom: np.ndarray) -> np.ndarray:
+def compute_loo_residuals(E: np.ndarray, denominator: np.ndarray) -> np.ndarray:
     """
     Compute leave-one-out (LOO) residuals.
 
@@ -119,7 +119,7 @@ def compute_loo_residuals(E: np.ndarray, denom: np.ndarray) -> np.ndarray:
     E : np.ndarray
         Residuals, shape (n_samples, n_axes).
 
-    denom : np.ndarray
+    denominator : np.ndarray
         Denominator values (1 - h), shape (n_samples,).
 
     Returns
@@ -127,7 +127,7 @@ def compute_loo_residuals(E: np.ndarray, denom: np.ndarray) -> np.ndarray:
     np.ndarray
         LOO residuals, shape (n_samples, n_axes).
     """
-    return E / denom[:, None]
+    return E / denominator[:, None]
 
 
 def compute_U(X: np.ndarray, use_pseudo_inverse: bool = True) -> np.ndarray:
@@ -156,25 +156,25 @@ def compute_U(X: np.ndarray, use_pseudo_inverse: bool = True) -> np.ndarray:
 
 
 def compute_deltaA_Frobenius(
-    U: np.ndarray, E: np.ndarray, denom: np.ndarray
+        U: np.ndarray, E: np.ndarray, denominator: np.ndarray
 ) -> np.ndarray:
     """ """
     N = E.shape[0]
     deltaA_Frobenius = np.empty(N, dtype=float)
     for i in range(N):
-        deltaB = -np.outer(U[i], E[i]) / denom[i]
+        deltaB = -np.outer(U[i], E[i]) / denominator[i]
         deltaA = deltaB.T
         deltaA_Frobenius[i] = np.linalg.norm(deltaA, "fro")
     return deltaA_Frobenius
 
 
 def compute_cook_like(
-    E: np.ndarray,
-    h: np.ndarray,
-    denom: np.ndarray,
-    p: int,
-    mse: np.ndarray,
-    epsilon: float,
+        E: np.ndarray,
+        h: np.ndarray,
+        denominator: np.ndarray,
+        p: int,
+        mse: np.ndarray,
+        epsilon: float,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Compute Cook's distance-like metrics per axis and combined.
@@ -188,7 +188,7 @@ def compute_cook_like(
     h : np.ndarray
         Leverage values, shape (n_samples,).
 
-    denom : np.ndarray
+    denominator : np.ndarray
         Denominator values (1 - h), shape (n_samples,).
 
     p : int
@@ -205,7 +205,7 @@ def compute_cook_like(
         Cook's distance per axis and combined.
     """
     cook = (
-        (E**2) / (p * (mse[None, :] + epsilon)) * (h[:, None] / (denom[:, None] ** 2))
+            (E ** 2) / (p * (mse[None, :] + epsilon)) * (h[:, None] / (denominator[:, None] ** 2))
     )
     cook_combined = np.mean(cook, axis=1)
     return cook, cook_combined
@@ -228,30 +228,42 @@ def compute_mse_per_axis(E: np.ndarray, dof: int, eps: float = 1e-12) -> np.ndar
     np.ndarray
         MSE per axis, shape (n_axes,).
     """
-    mse = np.sum(E**2, axis=0) / max(dof, 1)
+    mse = np.sum(E ** 2, axis=0) / max(dof, 1)
     return np.where(mse > eps, mse, eps)
 
 
 def influence_analytic(
-    X: np.ndarray,
-    Y: np.ndarray,
-    A: np.ndarray,
-    b0: np.ndarray | None = None,
-    cfg: InfluenceConfig = InfluenceConfig(),
+        X: np.ndarray,
+        Y: np.ndarray,
+        A: np.ndarray,
+        b0: np.ndarray | None = None,
+        influence_configuration: InfluenceConfig = InfluenceConfig(),
 ) -> InfluenceResult:
     """
-    Calcule:
-      - leverage
-      - residuals
-      - loo_residuals
-      - deltaA_Frobenius
-      - cook_per_axis / cook_combined
+    Compute analytic influence metrics for linear regression.
+    Parameters
+    ----------
+    X : np.ndarray
+        Design matrix, shape (n_samples, n_predictors).
+    Y : np.ndarray
+        True values, shape (n_samples, n_axes).
+    A : np.ndarray
+        Coefficient matrix, shape (n_predictors, n_axes).
+    b0 : np.ndarray | None
+        Intercept vector, shape (n_axes,). If None, no intercept is used.
+    influence_configuration : InfluenceConfig
+        Configuration for influence computation.
+    Returns
+    -------
+    InfluenceResult
+        A dataclass containing leverage, residuals, LOO residuals,
+        ΔA Frobenius norm, Cook's distance per axis, and combined Cook's distance
     """
     X = np.asarray(X, float)
     Y = np.asarray(Y, float)
     N, p = X.shape
 
-    # 1) Yhat + résidus
+    # 1) Yhat + residuals
     Yhat = compute_predictions(X, A, b0=b0)
     E = compute_residuals(Y, Yhat)
 
@@ -260,27 +272,27 @@ def influence_analytic(
 
     # 3) leverage + denom
     h = compute_leverage(H)
-    denom = compute_denom_from_leverage(h, epsilon=cfg.epsilon)
+    denominator = compute_denominator_from_leverage(h, epsilon=influence_configuration.epsilon)
 
     # 4) LOO residuals
-    E_loo = compute_loo_residuals(E, denom)
+    E_loo = compute_loo_residuals(E, denominator)
 
     # 5) ΔA score
     U = compute_U(X)
-    deltaA_Frobenius = compute_deltaA_Frobenius(E, U, denom)
+    deltaA_Frobenius = compute_deltaA_Frobenius(E, U, denominator)
 
     # 6) Cook-like
     dof = max(N - p, 1)
-    mse = compute_mse_per_axis(E, dof=dof, eps=cfg.epsilon)
+    mse = compute_mse_per_axis(E, dof=dof, eps=influence_configuration.epsilon)
     cook_per_axis, cook_combined = compute_cook_like(
-        E=E, h=h, denom=denom, p=p, mse=mse, epsilon=cfg.epsilon
+        E=E, h=h, denominator=denominator, p=p, mse=mse, epsilon=influence_configuration.epsilon
     )
 
     return InfluenceResult(
         leverage=h,
         residuals=E,
         loo_residuals=E_loo,
-        delta_A_Frobenius = deltaA_Frobenius,
+        delta_A_Frobenius=deltaA_Frobenius,
         cook_per_axis=cook_per_axis,
         cook_combined=cook_combined,
     )

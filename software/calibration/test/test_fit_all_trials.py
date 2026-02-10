@@ -3,7 +3,6 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 from software.calibration.cross_validation import (
-    train_test_split_trials,
     load_force_trials,
 )
 from software.calibration.calculate_base_AccBias import load_fixed_imu_params
@@ -15,7 +14,7 @@ from software.calibration.optimization_calibration.features import build_XY, com
 from software.calibration.optimization_calibration.fit import fit
 
 from software.calibration.optimization_calibration.metrics import (
-    RMSE_total, R2_total, RMSE_per_axis, R2_per_axis
+    rmse_total, r2_total, rmse_per_axis, r2_per_axis
 )
 from software.calibration.optimization_calibration.protocole import cap_trials_per_zone_and_mass
 
@@ -108,11 +107,11 @@ for r in invalids[:50]:
 # ----------------------------
 # Metrics (always in PHYSICAL units)
 # ----------------------------
-rmse_total = RMSE_total(Y_all, Y_pred_all)
-rmse_per_axis = RMSE_per_axis(Y_all, Y_pred_all)
+rmse_total = rmse_total(Y_all, Y_pred_all)
+rmse_per_axis = rmse_per_axis(Y_all, Y_pred_all)
 
-r2_total = R2_total(Y_all, Y_pred_all)
-r2_per_axis = R2_per_axis(Y_all, Y_pred_all)
+r2_total = r2_total(Y_all, Y_pred_all)
+r2_per_axis = r2_per_axis(Y_all, Y_pred_all)
 
 print("RMSE total:", rmse_total)
 print("RMSE axes :", rmse_per_axis)

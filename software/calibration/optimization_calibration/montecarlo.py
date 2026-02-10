@@ -1,4 +1,3 @@
-from __future__ import annotations
 from typing import Sequence
 import numpy as np
 
@@ -7,7 +6,25 @@ from software.calibration.optimization_calibration.types import MonteCarloConfig
 from software.calibration.optimization_calibration.types import FitConfig
 from software.calibration.optimization_calibration.fit import fit
 
-def _fit_from_trials(trials, acc_bias, base, builder: BuildXYFn, fit_configuration: FitConfig):
+def _fit_from_trials(trials, acc_bias, base, fit_configuration: FitConfig):
+    """
+    Fit A from a subset of trials
+    Parameters
+    ----------
+    trials: Sequence[dict]
+        List of trials
+    acc_bias
+    base :
+        Base configuration
+    builder: BuildXYFn
+        Function to build X and Y matrices
+    fit_configuration: FitConfig
+        Configuration for the fitting procedure
+    Returns
+    -------
+    A_true: np.ndarray
+        Estimated A matrix from the subset of trials
+    """
     X, Y_scaled, y_scale = build_XY(trials, acc_bias, base)
     fr = fit(X, Y_scaled, fit_configuration)
 
@@ -19,12 +36,12 @@ def bootstrap_A(
     trials: Sequence[dict],
     acc_bias,
     base,
-    builder: BuildXYFn,
     fit_configuration: FitConfig,
     montecarlo_configuration: MonteCarloConfig,
 ) -> MonteCarloResult:
     """
-    Bootstrap
+    Bootstrap resampling (with replacement)*
+    0 <
     """
     # Create the false stochastic
     rng = np.random.default_rng(montecarlo_configuration.seed)
@@ -35,7 +52,7 @@ def bootstrap_A(
     for _ in range(montecarlo_configuration.n_draws):
         idx = rng.choice(N, size=k, replace=True)
         subset = [trials[i] for i in idx]
-        As.append(_fit_from_trials(subset, acc_bias, base, builder, fit_configuration))
+        As.append(_fit_from_trials(subset, acc_bias, base, fit_configuration))
 
     As = np.stack(As, axis=0)
     return MonteCarloResult(A_mean=As.mean(axis=0), A_std=As.std(axis=0), A_samples=As)

@@ -1,9 +1,9 @@
 import numpy as np
 
 # Root Mean Square Error (RMSE) metrics
-def RMSE_per_axis(Y: np.ndarray, Y_pred: np.ndarray) -> float:
+def rmse_per_axis(Y: np.ndarray, Y_pred: np.ndarray) -> float:
     """
-    Compute the Root Mean Square Error (RMSE) per axis between true and predicted values.
+    Compute the Root Mean Square Error (rmse) per axis between true and predicted values.
 
     Parameters
     ----------
@@ -19,7 +19,8 @@ def RMSE_per_axis(Y: np.ndarray, Y_pred: np.ndarray) -> float:
     """
     err = Y_pred - Y
     return np.sqrt(np.mean(err**2, axis=0))
-def RMSE_total(Y: np.ndarray, Y_pred: np.ndarray) -> float:
+
+def rmse_total(Y: np.ndarray, Y_pred: np.ndarray) -> float:
     """
     Compute the total Root Mean Square Error (RMSE) between true and predicted values.
 
@@ -36,12 +37,10 @@ def RMSE_total(Y: np.ndarray, Y_pred: np.ndarray) -> float:
         Total RMSE.
     """
     err = Y_pred - Y
-    print(err)
-    print(np.mean(err**2))
     return float(np.sqrt(np.mean(err**2)))
 
 # R-squared (R²) metrics
-def R2_per_axis(Y: np.ndarray, Y_pred: np.ndarray, eps: float = 1e-12) -> np.ndarray:
+def r2_per_axis(Y: np.ndarray, Y_pred: np.ndarray, eps: float = 1e-12) -> np.ndarray:
     """
     Compute the R-squared (R²) per axis between true and predicted values.
 
@@ -64,7 +63,7 @@ def R2_per_axis(Y: np.ndarray, Y_pred: np.ndarray, eps: float = 1e-12) -> np.nda
     # Avoid division by zero if an axis is (nearly) constant
     return np.where(ss_tot > eps, 1.0 - ss_res / ss_tot, np.nan)
 
-def R2_total(Y: np.ndarray, Y_pred: np.ndarray, eps: float = 1e-12) -> float:
+def r2_total(Y: np.ndarray, Y_pred: np.ndarray, eps: float = 1e-12) -> float:
     """
     Compute the total R-squared (R²) between true and predicted values.
 
@@ -103,7 +102,7 @@ def nrmse_per_axis(Y: np.ndarray, Y_pred: np.ndarray) -> np.ndarray:
     float
         NRMSE per axis.
     """
-    rmse = RMSE_per_axis(Y, Y_pred)
+    rmse = rmse_per_axis(Y, Y_pred)
     range_Y = np.ptp(Y, axis=0)  # Peak to peak (max - min) per axis
     return rmse / range_Y
 

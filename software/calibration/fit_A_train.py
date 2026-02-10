@@ -11,9 +11,7 @@ def build_FMs_Channels(force_trials: Sequence[dict], acc_bias: np.ndarray, base:
     FMs, Channels = [], []
     for t in force_trials:
         fm = wc.make_an_estimation_of_forces_moments(t, acc_bias, base)
-        # print(f"Trial {t['__file__']}: Estimated FM = {fm}")
         ch = np.median(t["Analog"]["Force"], axis=0)
-        # print(f"Trial {t['__file__']}: Channel   = {ch}")
         FMs.append(fm)
         Channels.append(ch)
     return np.vstack(FMs), np.vstack(Channels)
@@ -22,13 +20,6 @@ def fit_A(force_trials_train: list[dict], acc_bias: np.ndarray, base: np.ndarray
     FMs, Channels = build_FMs_Channels(force_trials_train, acc_bias, base)
     return wc.calculate_calibration_matrix(FMs, Channels)
 
-# def evaluate_A(force_trials_test: list[dict], A: np.ndarray, acc_bias: np.ndarray, base: np.ndarray) -> dict:
-#     FMs, Channels = build_FMs_Channels(force_trials_test, acc_bias, base)
-#     FMs_pred = (A @ Channels.T).T
-#     err = FMs_pred - FMs
-#     rmse_per_axis = np.sqrt(np.mean(err**2, axis=0))
-#     rmse_total = float(np.sqrt(np.mean(err**2)))
-#     return {"rmse_total": rmse_total, "rmse_per_axis": rmse_per_axis, "n_test": len(force_trials_test)}
 
 def evaluate_A(force_trials_test: list[dict],
                A: np.ndarray,
@@ -113,7 +104,6 @@ def main():
     # ---- 6) Fit A
     A = fit_A(train, acc_bias, base)
     print("\nA shape:", A.shape)
-    print(A)
     assert A.shape == (6, 6), "Expected A to be 6x6"
 
     # ---- 7) Evaluate

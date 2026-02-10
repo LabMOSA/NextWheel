@@ -85,11 +85,8 @@ def build_XY(trials: Sequence[dict], acc_bias, base, normalize_y=None):
 
 
 def position_from_imu_gravity(trial: dict) -> str | None:
-    # À adapter selon ta structure exacte
-    # Exemples possibles: trial["IMU"]["Acc"], trial["Analog"]["Acc"], etc.
     acc = None
 
-    # essaie quelques chemins courants
     if "IMU" in trial and "Acc" in trial["IMU"]:
         acc = trial["IMU"]["Acc"]
     elif "IMU" in trial and "Accel" in trial["IMU"]:
@@ -101,7 +98,6 @@ def position_from_imu_gravity(trial: dict) -> str | None:
         return None
 
     acc = np.asarray(acc, float)  # shape (T,3)
-    print(acc)
     if acc.ndim != 2 or acc.shape[1] != 3:
         return None
 

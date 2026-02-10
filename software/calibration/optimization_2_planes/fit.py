@@ -58,7 +58,6 @@ def fit_plane_3x3(
     else:
         b0 = None
         A_plane = B.T  # (3,3)
-    print(A_plane)
     return A_plane, b0, B
 
 

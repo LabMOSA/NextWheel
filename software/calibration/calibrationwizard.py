@@ -822,7 +822,6 @@ while not li.button_dialog(
 
 # %% Part 4 - Calibration matrix calculation
 # A, Trials = estimate_calibration_matrix(path + trials_dir)
-# print(A)
 # print(f"Calibration matrix estimated and printed above.")
 # # print(Trials)
 # if __name__ == "__main__":

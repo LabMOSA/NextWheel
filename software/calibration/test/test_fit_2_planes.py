@@ -11,11 +11,9 @@ from software.calibration.optimization_2_planes.features import build_XY
 from software.calibration.optimization_2_planes.fit import fit_two_planes
 from software.calibration.optimization_2_planes.outliers import get_worst_residual_trials, remove_outliers_by_residual
 from software.calibration.optimization_2_planes.types import FitResultTwoPlanes
-
 from software.calibration.optimization_2_planes import FitConfig
-
 from software.calibration.optimization_calibration.metrics import (
-    RMSE_total, R2_total, RMSE_per_axis, R2_per_axis
+    rmse_total, r2_total, rmse_per_axis, r2_per_axis
 )
 from software.calibration.optimization_calibration.plot import (
     plot_pred_vs_true,
@@ -54,12 +52,12 @@ b0 = fit_2_plans.b0_full
 Y_pred = (X_test @ A_full.T)
 if b0 is not None:
     Y_pred = Y_pred + b0[None, :]
-
-
-# ----------------------------
-# Train Metrics (for information)
-# ----------------------------
-
+#
+#
+# # ----------------------------
+# # Train Metrics (for information)
+# # ----------------------------
+#
 Y_train_pred = (X_train @ A_full.T)
 if b0 is not None:
     Y_train_pred = Y_train_pred + b0[None, :]
@@ -68,14 +66,14 @@ Y_pred_all_trials = (X_ @ A_full.T)
 if b0 is not None:
     Y_pred_all_trials = Y_pred_all_trials + b0[None, :]
 
-rmse_total_train = RMSE_total(Y_train, Y_train_pred)
+rmse_total_train = rmse_total(Y_train, Y_train_pred)
 print("RMSE total train:", rmse_total_train)
-rmse_per_axis = RMSE_per_axis(Y_train, Y_train_pred)
+rmse_per_axis = rmse_per_axis(Y_train, Y_train_pred)
 
 print("RMSE axes train :", rmse_per_axis)
 
-r2_total_train = R2_total(Y_train, Y_train_pred)
-r2_per_axis_train = R2_per_axis(Y_train, Y_train_pred)
+r2_total_train = r2_total(Y_train, Y_train_pred)
+r2_per_axis_train = r2_per_axis(Y_train, Y_train_pred)
 
 print("R2 total train  :", r2_total_train)
 print("R2 axes train   :", r2_per_axis_train)

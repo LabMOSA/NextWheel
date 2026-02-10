@@ -1,35 +1,19 @@
-from __future__ import annotations
-
-from dataclasses import asdict
-from typing import Callable, Sequence, Any, List
-from pathlib import Path
-import csv
-import json
+from typing import Callable, Sequence, Any
 import numpy as np
-
-from software.calibration.optimization_2_planes.export import export_protocols_csv, export_protocols_json
 from software.calibration.optimization_calibration.types import (
     FitConfig,
     MonteCarloConfig,
-    ProtocolSpec,
-    ProtocolEval, ProtocolSpecZone,
+    ProtocolEval
 )
-
-from software.calibration.optimization_calibration.features import build_XY, position_from_imu_gravity
+from software.calibration.optimization_calibration.features import build_XY
 from software.calibration.optimization_calibration.fit import fit
-from software.calibration.optimization_calibration.metrics import (
-    RMSE_total,
-    RMSE_per_axis,
-    R2_total,
-    R2_per_axis,
-)
+from software.calibration.optimization_calibration.metrics import rmse_total, r2_total, rmse_per_axis, r2_per_axis
 from software.calibration.optimization_calibration.montecarlo import bootstrap_A
 from software.calibration.optimization_calibration.influence import influence_analytic
 from software.calibration.optimization_calibration.report import rank_trials
-
 from software.calibration.fit_A_train import build_FMs_Channels
 
-
+AXES_6 = ("Fx", "Fy", "Fz", "Mx", "My", "Mz")
 
 # # ----------------------------
 # # Protocol evaluation
@@ -45,7 +29,6 @@ def _get(trial: dict, key: str, default=None):
         return default
 
 def default_trial_id(trial: dict):
-    # identifiant stable (chez toi: __file__)
     return _get(trial, "__file__", None)
 
 def evaluate_protocol(
@@ -56,7 +39,6 @@ def evaluate_protocol(
     base: np.ndarray,
     fit_cfg,
     mc_cfg,
-    test_ratio: float = 0.2,
     seed: int = 0,
     trial_id_fn: Callable[[dict], Any] = default_trial_id,
 ) -> ProtocolEval:
@@ -145,12 +127,12 @@ def evaluate_protocol(
         Y_pred = Y_pred + b0[None, :]
 
     # --- 6) metrics ---
-    rmse_total = _finite_or_nan(RMSE_total(Y_test, Y_pred))
-    r2_total = _finite_or_nan(R2_total(Y_test, Y_pred))
-    rmse_per_axis = [float(x) for x in np.asarray(RMSE_per_axis(Y_test, Y_pred)).ravel().tolist()]
-    r2_per_axis = [float(x) for x in np.asarray(R2_per_axis(Y_test, Y_pred)).ravel().tolist()]
+    _rmse_total = _finite_or_nan(rmse_total(Y=Y_test, Y_pred=Y_pred))
+    _r2_total = _finite_or_nan(r2_total(Y_test, Y_pred))
+    _rmse_per_axis = [float(x) for x in np.asarray(rmse_per_axis(Y_test, Y_pred)).ravel().tolist()]
+    _r2_per_axis = [float(x) for x in np.asarray(r2_per_axis(Y_test, Y_pred)).ravel().tolist()]
 
-    if not np.isfinite(rmse_total):
+    if not np.isfinite(_rmse_total):
         return ProtocolEval(
             name=spec.name,
             n_total=n_total,
@@ -185,10 +167,10 @@ def evaluate_protocol(
     A_std_mean = float(np.mean(A_std))
     A_std_max = float(np.max(A_std))
 
-    denom = np.abs(A_mean)
-    mask = denom > 1e-12
+    denominator = np.abs(A_mean)
+    mask = denominator > 1e-12
     cv = np.zeros_like(A_std)
-    cv[mask] = A_std[mask] / denom[mask]
+    cv[mask] = A_std[mask] / denominator[mask]
     A_cv_mean = float(np.mean(cv[mask])) if np.any(mask) else float("nan")
     A_cv_max = float(np.max(cv[mask])) if np.any(mask) else float("nan")
 
@@ -208,10 +190,10 @@ def evaluate_protocol(
         n_total=n_total,
         n_train=len(train_trials),
         n_test=len(test_trials),
-        rmse_total=rmse_total,
-        r2_total=r2_total,
-        rmse_per_axis=rmse_per_axis,
-        r2_per_axis=r2_per_axis,
+        rmse_total=_rmse_total,
+        r2_total=_r2_total,
+        rmse_per_axis=_rmse_per_axis,
+        r2_per_axis=_r2_per_axis,
         A_std_mean=A_std_mean,
         A_std_max=A_std_max,
         A_cv_mean=A_cv_mean,
@@ -252,12 +234,32 @@ def protocol_score(
         + beta_cv * eval_.A_cv_mean
         + gamma_dom * float(dom)
     )
-AXES_6 = ("Fx", "Fy", "Fz", "Mx", "My", "Mz")
+
 def summarize_protocols(best: Sequence[tuple]) -> list[dict]:
     """
-    best: liste de (score, ProtocolEval) ou (score, ProtocolEval, idxs)
+    Summarize the best protocols into a list of dicts for easier export (CSV/JSON) or display.
 
-    Retour: liste de dicts avec score + rmse_total (+ rmse par axe si dispo)
+        Each dict contains:
+        - rank: int
+        - score: float
+        - name: str
+        - n_total: int
+        - n_train: int
+        - n_test: int
+        - rmse_total: float
+        - r2_total: float
+        - A_cv_mean: float
+
+    Parameters
+    ----------
+    best : Sequence[tuple]
+        A sequence of tuples, where each tuple is either (score, ProtocolEval) or (
+        score, ProtocolEval, idxs).
+
+    Returns
+    -------
+    list[dict]
+        A list of dictionaries summarizing the best protocols.
     """
     rows: list[dict] = []
     for rank, item in enumerate(best, start=1):
@@ -306,9 +308,9 @@ def search_best_protocols_from_indices(
     beta_cv: float = 1.0,
     gamma_dom: float = 0.0,
     seed: int = 0,
-    test_ratio: float = 0.2,
     split_seed_stride: int = 1,
 ) -> list[tuple[float, ProtocolEval, list[int]]]:
+
     results: list[tuple[float, ProtocolEval, list[int]]] = []
 
     for k, idxs in enumerate(protocol_indices):
@@ -322,7 +324,6 @@ def search_best_protocols_from_indices(
             base=base,
             fit_cfg=fit_cfg,
             mc_cfg=mc_cfg,
-            test_ratio=test_ratio,
             seed=seed + split_seed_stride * k,
         )
 
