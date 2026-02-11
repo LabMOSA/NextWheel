@@ -89,7 +89,7 @@ class ProtocolEval:
     rmse_per_axis: list[float]
     r2_per_axis: list[float]
 
-    # Stability (bootstrap)
+    # Stability
     A_std_mean: float
     A_std_max: float
     A_cv_mean: float
@@ -133,3 +133,10 @@ class ProtocolSpecZone:
             f"{self.name} | masses={self.masses} degrees={self.degrees} "
             f"positions={self.positions} max_per_condition={self.max_per_condition}"
         )
+
+@dataclass(frozen=True)
+class TrialMeta:
+    file: Optional[str]
+    plane: Optional[str]
+    angle_deg: Optional[float]
+    weight_kg: Optional[float]

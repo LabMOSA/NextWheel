@@ -11,11 +11,12 @@ from software.calibration.cross_validation import (
     load_force_trials,
 )
 from software.calibration.calculate_base_AccBias import load_fixed_imu_params
+from software.calibration.optimization_calibration.recommand_protocol import print_best_protocol_trials
 from software.calibration.optimization_calibration.types import ProtocolSpec
 
 path = Path(__file__).resolve().parent.parent
 imu_dir = path / "E1_E2"
-packages_root = path / "package_trials_good"
+packages_root = path / "trials_organized"
 trials = load_force_trials(packages_root)
 base, acc_bias, imu_info = load_fixed_imu_params(imu_dir)
 
@@ -36,7 +37,7 @@ edges_per_axis = [edges_fx, edges_fy, edges_fz, edges_mx, edges_my, edges_mz]
 axes_for_ranges = [0, 1, 2, 3, 4, 5]
 
 pct = np.array([0.10, 0.10, 0.10, 0.10, 0.10, 0.10])
-min_tol = np.array([1, 1, 1, 0.5, 0.5, 0.5])     # plancher
+min_tol = np.array([1, 1, 1, 0.5, 0.5, 0.5])
 
 
 
@@ -69,7 +70,7 @@ groups  = build_choice_groups_by_zone(
     max_candidates_per_group=1
 )
 
-protocols = generate_random_protocols(groups, n_protocols=10, seed=0)
+protocols = generate_random_protocols(groups, n_protocols= 1, seed=0)
 chosen0 = [trials[i] for i in protocols[0]]
 fit_cfg = FitConfig(method="ols", intercept=False)
 mc_cfg = MonteCarloConfig(n_draws=300, frac=0.8, seed=42)
@@ -91,6 +92,9 @@ print(best)
 rows = summarize_protocols(best)
 print(rows)
 
+
+
+print_best_protocol_trials(best, trials, max_protocols=10, show_file=False)
 
 
 print(count_all_protocols(groups))

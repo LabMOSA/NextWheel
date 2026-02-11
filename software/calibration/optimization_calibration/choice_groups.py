@@ -198,7 +198,7 @@ def generate_random_protocols(
     groups_list = groups_to_list(groups)
 
     protos: list[list[int]] = []
-    for _ in range(int(n_protocols)):
+    for i in range(int(n_protocols)):
         idxs = [int(rng.choice(g)) for g in groups_list]
         protos.append(idxs)
     return protos

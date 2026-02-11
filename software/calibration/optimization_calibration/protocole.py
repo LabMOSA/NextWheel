@@ -1,5 +1,7 @@
 from typing import Callable, Sequence, Any
 import numpy as np
+
+from software.calibration.optimization_calibration.recommand_protocol import list_trials_pretty, print_trials_table
 from software.calibration.optimization_calibration.types import (
     FitConfig,
     MonteCarloConfig,
@@ -205,6 +207,7 @@ def evaluate_protocol(
         top_idx = int(rows[0].idx)
         top_file = str(rows[0].meta.get("__file__")) if rows[0].meta else None
 
+    notes = "\n".join(list_trials_pretty(chosen, show_file=False))
     return ProtocolEval(
         name=spec.name,
         n_total=n_total,
@@ -221,7 +224,7 @@ def evaluate_protocol(
         influence_top_score=top_score,
         influence_top_idx=top_idx,
         influence_top_file=top_file,
-        notes="",
+        notes= notes,
     )
 
 
@@ -331,7 +334,7 @@ def search_best_protocols_from_indices(
         s = protocol_score(ev, alpha_rmse=alpha_rmse, beta_cv=beta_cv, gamma_dom=gamma_dom)
         if not np.isfinite(s):
             continue
-
+        print(f"k={k}: protocol={ev}")
         results.append((float(s), ev, list(map(int, indexes))))
 
     results.sort(key=lambda x: x[0])
@@ -381,6 +384,7 @@ def summarize_protocols(best: Sequence[tuple]) -> list[dict]:
             "rmse_total": float(getattr(ev, "rmse_total", float("nan"))),
             "r2_total": float(getattr(ev, "r2_total", float("nan"))),
             "A_cv_mean": float(getattr(ev, "A_cv_mean", float("nan"))),
+            "notes": str(getattr(ev, "notes", "")),
         }
 
         rmse_axes = getattr(ev, "rmse_per_axis", None)

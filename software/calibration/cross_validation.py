@@ -43,7 +43,6 @@ def load_force_trials(packages_trials: Union[str, Path]) -> list[dict]:
         except Exception:
             package = f.parent.name  # fallback
 
-        print(f"Loading: {f}")
 
         d = ktk.load(str(f))
         d["__file__"] = str(f)

@@ -3,7 +3,8 @@
 import numpy as np
 import kineticstoolkit as ktk
 import nextwheel
-from nextwheel import NextWheel
+from software.python.nextwheel import NextWheel
+
 import wheelcalibration as wc
 import limitedinteraction as li
 import time
