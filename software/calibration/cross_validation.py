@@ -1,23 +1,62 @@
 from __future__ import annotations
 from pathlib import Path
+from typing import Union
+
 import numpy as np
 import kineticstoolkit as ktk
 from collections import Counter
 
 
-def load_force_trials(packages_trials: str | Path) -> list[dict]:
+# def load_force_trials(packages_trials: str | Path) -> list[dict]:
+#     root = Path(packages_trials)
+#     trials_calibration = []
+#     for pkg in sorted(root.iterdir()):
+#         print(f"Checking package: {pkg.name}")
+#         if not pkg.is_dir():
+#             continue
+#         for f in sorted(pkg.glob("ForcesForCalibrationMatrix*")):
+#             d = ktk.load(str(f))
+#             d["__file__"] = str(f)
+#             d["__package__"] = pkg.name
+#             trials_calibration.append(d)
+#     if not trials_calibration:
+#         raise FileNotFoundError(f"No force trials found under {root}")
+#     return trials_calibration
+
+def load_force_trials(packages_trials: Union[str, Path]) -> list[dict]:
     root = Path(packages_trials)
-    trials_calibration = []
-    for pkg in sorted(root.iterdir()):
-        if not pkg.is_dir():
+    if not root.exists():
+        raise FileNotFoundError(f"Root folder does not exist: {root}")
+
+    trials_calibration: list[dict] = []
+
+    # Cherche récursivement tous les fichiers ForcesForCalibrationMatrix*
+    files = sorted(root.rglob("ForcesForCalibrationMatrix*"))
+
+    for f in files:
+        if not f.is_file():
             continue
-        for f in sorted(pkg.glob("ForcesForCalibrationMatrix*")):
-            d = ktk.load(str(f))
-            d["__file__"] = str(f)
-            d["__package__"] = pkg.name
-            trials_calibration.append(d)
+
+        # "package" = 1er dossier sous root (ex: Protocol_V1)
+        try:
+            package = f.relative_to(root).parts[0]
+        except Exception:
+            package = f.parent.name  # fallback
+
+        print(f"Loading: {f}")
+
+        d = ktk.load(str(f))
+        d["__file__"] = str(f)
+        d["__package__"] = package
+        d["__relpath__"] = str(f.relative_to(root))  # utile pour debug/tri
+
+        trials_calibration.append(d)
+
     if not trials_calibration:
-        raise FileNotFoundError(f"No force trials found under {root}")
+        raise FileNotFoundError(
+            f"No force trials found under {root} (pattern: ForcesForCalibrationMatrix*)"
+        )
+
     return trials_calibration
 
 def train_test_split_trials(trials: list[dict], test_ratio: float = 0.2, seed: int = 0, stratify_by_mass: bool = True):
