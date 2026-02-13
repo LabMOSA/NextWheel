@@ -1,8 +1,8 @@
 from pathlib import Path
 import numpy as np
 
-from software.calibration.optimization_calibration.protocole import evaluate_protocol, protocol_score, search_best_protocols_from_indices, summarize_protocols
-from software.calibration.optimization_calibration.choice_groups import build_choice_groups_by_zone, groups_to_list, count_all_protocols, generate_random_protocols
+from software.calibration.optimization_calibration.protocole import search_best_protocols_from_indices, summarize_protocols
+from software.calibration.optimization_calibration.choice_groups import build_choice_groups_by_zone, count_all_protocols, generate_random_protocols
 from software.calibration.optimization_calibration.features import (
     build_XY,
 )
@@ -43,7 +43,7 @@ min_tol = np.array([1, 1, 1, 0.5, 0.5, 0.5])
 
 
 # --- 6 graphs: one per channel (hist overlay) ---
-axis_names = ["Ch0", "Ch1", "Ch2", "Ch3", "Ch4", "Ch5"]  # renomme si tu veux
+axis_names = ["Ch0", "Ch1", "Ch2", "Ch3", "Ch4", "Ch5"]
 
 
 
@@ -52,8 +52,8 @@ axis_names = ["Ch0", "Ch1", "Ch2", "Ch3", "Ch4", "Ch5"]  # renomme si tu veux
 #     Y=Y_all,
 #     pct=pct,
 #     min_tol=min_tol,
-#     X=X_all,                 # optionnel
-#     score_fn=default_score_fn, # optionnel
+#     X=X_all,
+#     score_fn=default_score_fn,
 #     seed=44,
 # )
 # print(kept_idx)
@@ -96,13 +96,8 @@ print(rows)
 
 print_best_protocol_trials(best, trials, max_protocols=10, show_file=False)
 
-
 print(count_all_protocols(groups))
-print(generate_random_protocols(groups, n_protocols=5))
-print(f"Total groups: {len(groups)}")
-print(f"Total trials: {len(trials)}")
-for i, idxs in enumerate(groups.values()):
-    print(f"Group {i}: {len(idxs)} trials")
+
 
 
 

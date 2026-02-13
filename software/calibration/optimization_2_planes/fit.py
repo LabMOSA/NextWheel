@@ -1,9 +1,5 @@
 from software.calibration.optimization_2_planes.features import build_XY
-from software.calibration.optimization_2_planes.types import (
-    FitConfig,
-    FitResult,
-    FitResultTwoPlanes,
-)
+
 import numpy as np
 from software.calibration.optimization_2_planes.organize_trials import assign_planes
 

@@ -2,7 +2,7 @@ from typing import Sequence
 import numpy as np
 
 from software.calibration.optimization_calibration.features import build_XY
-from software.calibration.optimization_calibration.types import MonteCarloConfig, MonteCarloResult, BuildXYFn
+from software.calibration.optimization_calibration.types import MonteCarloConfig, MonteCarloResult
 from software.calibration.optimization_calibration.types import FitConfig
 from software.calibration.optimization_calibration.fit import fit
 
@@ -16,8 +16,6 @@ def _fit_from_trials(trials, acc_bias, base, fit_configuration: FitConfig):
     acc_bias
     base :
         Base configuration
-    builder: BuildXYFn
-        Function to build X and Y matrices
     fit_configuration: FitConfig
         Configuration for the fitting procedure
     Returns
@@ -58,7 +56,7 @@ def bootstrap_A(
     return MonteCarloResult(A_mean=As.mean(axis=0), A_std=As.std(axis=0), A_samples=As)
 
 
-def subsample_A(trials: Sequence[dict], acc_bias, base, builder: BuildXYFn,
+def subsample_A(trials: Sequence[dict], acc_bias, base,
                 fit_cfg: FitConfig, mc_cfg: MonteCarloConfig) -> MonteCarloResult:
     """
     Subsampling (without replacement)
@@ -96,7 +94,7 @@ def subsample_A(trials: Sequence[dict], acc_bias, base, builder: BuildXYFn,
     for _ in range(mc_cfg.n_draws):
         idx = rng.choice(N, size=k, replace=False)
         subset = [trials[i] for i in idx]
-        As.append(_fit_from_trials(subset, acc_bias, base, builder, fit_cfg))
+        As.append(_fit_from_trials(subset, acc_bias, base, fit_cfg))
 
     As = np.stack(As, axis=0)
     return MonteCarloResult(A_mean=As.mean(axis=0), A_std=As.std(axis=0), A_samples=As)

@@ -1,6 +1,6 @@
 import numpy as  np
 from typing import Sequence, Callable, Any
-
+import math
 
 def margin_trials(
     trials: list[dict],
@@ -13,76 +13,128 @@ def margin_trials(
     seed: int = 0,
 ) -> np.ndarray:
     """
-    Enlève les quasi-doublons selon y_key_from_relative_tolerances:
-      - construit une key par trial (tuple d'entiers)
-      - regroupe les trials ayant la même key
-      - garde 1 trial par key (meilleur score si X+score_fn, sinon aléatoire)
+    Remove near-duplicate trials based on relative/absolute tolerances applied to Y.
 
-    Retourne:
-        kept_idx: np.ndarray d'indices dans [0..n-1] des trials conservés.
+    This function builds a discrete key for each trial by quantizing each Y component
+    using a per-sample tolerance:
+
+        tol_ij = max(min_tol[j], pct[j] * abs(Y[i, j]))
+        Q[i, j] = round(Y[i, j] / tol_ij)
+
+    Trials sharing the same key are considered near-duplicates. For each key/group,
+    exactly one representative is kept:
+    - If X and score_fn are provided: keep the trial with the best score.
+    - Otherwise: keep a random trial from the group.
+
+    Parameters
+    ----------
+    trials : list[dict]
+        Trial objects (not used directly by this function, kept for API consistency).
+    Y : np.ndarray
+        Array of shape (n_trials, n_outputs) used to define near-duplicates.
+    pct : np.ndarray
+        Relative tolerance per Y column (shape (n_outputs,)). Must be > 0.
+    min_tol : np.ndarray
+        Minimum absolute tolerance per Y column (shape (n_outputs,)). Must be > 0.
+    X : np.ndarray | None, optional         feature matrix of shape (n_trials, n_features), used for scoring.
+    score_fn : Callable[[np.ndarray, np.ndarray], np.ndarray] | None, optional
+        Scoring function. Called as score_fn(X, idxes) and must return one score per idx.
+        Higher score means "better".
+    seed : int, default=0
+        Random seed used when selecting a representative randomly.
+
+    Returns
+    -------
+    kept_idx : np.ndarray
+        Sorted array of unique indices (dtype int) in [0..n_trials-1] of retained trials.
     """
     Y = np.asarray(Y, float)
     pct = np.asarray(pct, float).ravel()
     min_tol = np.asarray(min_tol, float).ravel()
 
     n = len(trials)
+    if Y.ndim != 2:
+        raise ValueError("Y must be a 2D array of shape (n_trials, n_outputs).")
     if Y.shape[0] != n:
-        raise ValueError("Y must have same number of rows as trials")
-
+        raise ValueError("Y must have the same number of rows as trials.")
     if pct.size != Y.shape[1] or min_tol.size != Y.shape[1]:
-        raise ValueError("pct and min_tol must match Y columns")
+        raise ValueError("pct and min_tol must have the same length as the number of Y columns.")
     if np.any(pct <= 0) or np.any(min_tol <= 0):
-        raise ValueError("pct and min_tol must be > 0")
+        raise ValueError("pct and min_tol must be strictly positive (> 0).")
 
     rng = np.random.default_rng(seed)
 
-    # --- 1) construire les keys EXACTEMENT comme ta fonction ---
+    # 1) Build keys exactly as described
     tol_ij = np.maximum(min_tol[None, :], pct[None, :] * np.abs(Y))
     Q = np.rint(Y / tol_ij).astype(np.int64)
     keys = [tuple(int(x) for x in row.tolist()) for row in Q]
 
-    # --- 2) regrouper key -> indices ---
+    # 2) Group indices by key
     groups: dict[tuple[int, ...], list[int]] = {}
     for i, k in enumerate(keys):
         groups.setdefault(k, []).append(i)
 
-    # --- 3) choisir 1 représentant par groupe ---
+    # 3) Pick one representative per group
     kept: list[int] = []
 
     use_score = (X is not None) and (score_fn is not None)
     if use_score:
         X = np.asarray(X, float)
+        if X.ndim != 2:
+            raise ValueError("X must be a 2D array of shape (n_trials, n_features).")
         if X.shape[0] != n:
-            raise ValueError("X must have same number of rows as trials")
+            raise ValueError("X must have the same number of rows as trials.")
 
-    for idxs_list in groups.values():
-        idxs = np.asarray(idxs_list, dtype=int)
+    for idxes_list in groups.values():
+        idxes = np.asarray(idxes_list, dtype=int)
 
-        if idxs.size == 1:
-            kept.append(int(idxs[0]))
+        if idxes.size == 1:
+            kept.append(int(idxes[0]))
             continue
 
         if use_score:
-            scores = np.asarray(score_fn(X, idxs), float).ravel()
-            if scores.size != idxs.size:
-                raise ValueError("score_fn must return one score per idx in idxs")
-            winner = int(idxs[int(np.argmax(scores))])
+            scores = np.asarray(score_fn(X, idxes), float).ravel()
+            if scores.size != idxes.size:
+                raise ValueError("score_fn must return one score per index in idxes.")
+            winner = int(idxes[int(np.argmax(scores))])
         else:
-            winner = int(rng.choice(idxs))
+            winner = int(rng.choice(idxes))
 
         kept.append(winner)
 
     kept_idx = np.array(sorted(set(kept)), dtype=int)
     return kept_idx
 
-
-
 def zone_id_from_Y_ranges(
     Y: np.ndarray,
     edges_per_axis: Sequence[np.ndarray],
     axes: Sequence[int] | None = None,
 ) -> np.ndarray:
+    """
+    Assign a zone ID to each row of Y based on per-axis bin edges.
+
+    For each selected axis, values are binned using np.digitize and then combined
+    into a single integer ID (mixed radix encoding).
+
+    Parameters
+    ----------
+    Y : np.ndarray
+        Array of shape (n_samples, n_dims).
+    edges_per_axis : Sequence[np.ndarray]
+        A sequence of 1D arrays of bin edges for each selected axis.
+        Each edges array must have length >= 2.
+    axes : Sequence[int] | None, optional
+        Indices of Y columns to use. If None, uses [0..len(edges_per_axis)-1].
+
+    Returns
+    -------
+    zone : np.ndarray
+        Array of shape (n_samples,) of integer zone IDs.
+    """
     Y = np.asarray(Y, float)
+    if Y.ndim != 2:
+        raise ValueError("Y must be a 2D array of shape (n_samples, n_dims).")
+
     n = Y.shape[0]
     if n == 0:
         return np.array([], dtype=int)
@@ -90,7 +142,7 @@ def zone_id_from_Y_ranges(
     if axes is None:
         axes = list(range(len(edges_per_axis)))
     if len(axes) != len(edges_per_axis):
-        raise ValueError("axes and edges_per_axis must have the same length")
+        raise ValueError("axes and edges_per_axis must have the same length.")
 
     per_axis_bins: list[np.ndarray] = []
     sizes: list[int] = []
@@ -98,7 +150,7 @@ def zone_id_from_Y_ranges(
     for ax, edges in zip(axes, edges_per_axis):
         edges = np.asarray(edges, float)
         if edges.ndim != 1 or edges.size < 2:
-            raise ValueError("Each edges array must be 1D with at least 2 values")
+            raise ValueError("Each edges array must be 1D with at least 2 values.")
 
         z = np.digitize(Y[:, ax], edges, right=False) - 1
         z = np.clip(z, 0, edges.size - 2)
@@ -113,13 +165,27 @@ def zone_id_from_Y_ranges(
 
     return zone
 
-def default_score_fn(X: np.ndarray, idxs: np.ndarray) -> np.ndarray:
+def default_score_fn(X: np.ndarray, idxes: np.ndarray) -> np.ndarray:
     """
-    Score "informatif" simple (sans PCA) :
-    ||X|| sur X normalisé (z-score par colonne).
+    Simple "informativeness" score without PCA.
+
+    Computes the L2 norm of z-scored features for the given indices:
+      score(i) = || zscore(X)[i] ||_2
+
+    Parameters
+    ----------
+    X : np.ndarray
+        Feature matrix of shape (n_samples, n_features).
+    idxes : np.ndarray
+        Indices of samples to score.
+
+    Returns
+    -------
+    scores : np.ndarray
+        Array of shape (len(idxes),) with one score per index.
     """
     X = np.asarray(X, float)
-    idxs = np.asarray(idxs, dtype=int)
+    idxes = np.asarray(idxes, dtype=int)
 
     Xs = X.copy()
     mu = Xs.mean(axis=0, keepdims=True)
@@ -127,7 +193,7 @@ def default_score_fn(X: np.ndarray, idxs: np.ndarray) -> np.ndarray:
     sd[sd < 1e-12] = 1.0
     Xs = (Xs - mu) / sd
 
-    return np.linalg.norm(Xs[idxs], axis=1)
+    return np.linalg.norm(Xs[idxes], axis=1)
 
 
 
@@ -204,7 +270,7 @@ def generate_random_protocols(
     return protos
 
 
-import math
+
 
 
 def count_all_protocols(groups: Any) -> int:

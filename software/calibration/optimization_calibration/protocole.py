@@ -1,7 +1,7 @@
 from typing import Callable, Sequence, Any
 import numpy as np
 
-from software.calibration.optimization_calibration.recommand_protocol import list_trials_pretty, print_trials_table
+from software.calibration.optimization_calibration.recommand_protocol import list_trials_pretty
 from software.calibration.optimization_calibration.types import (
     FitConfig,
     MonteCarloConfig,
