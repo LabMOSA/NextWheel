@@ -1,7 +1,6 @@
 from pathlib import Path
-from typing import Any, Optional, Sequence, Dict, List
+from typing import Any, Optional, Sequence, List
 import numpy as np
-import kineticstoolkit as ktk
 from software.calibration.optimization_calibration.types import ProtocolEval, TrialMeta
 
 PLAN_DIRS = {"FxFyMz": "FxFyMz", "MxMyFz": "MxMyFz"}
@@ -11,7 +10,7 @@ def infer_plane_from_path(file_path: Any) -> Optional[str]:
     Parameters
     ----------
     file_path : Any
-        A path-like object (str, Path, or convertible to str). May be None.
+        A path-like object (str, Path, or convertible to str). Maybe None.
     Returns
     -------
     plane : str | None
@@ -146,7 +145,6 @@ def list_trials_pretty(trials: Sequence[dict], *, show_file: bool = False) -> Li
     lines : list[str]
         One formatted string per trial.
     """
-    cache: Dict[str, Optional[dict]] = {}
     out: List[str] = []
     for i, t in enumerate(trials, start=1):
         meta = extract_trial_meta(t)
@@ -219,10 +217,10 @@ def print_trials_table(
     """
     rows = list_trials_rows(trials)
 
-    def _key(r: dict):
+    def _key(trial: dict):
         keys = []
         for k in sort_by:
-            v = r.get(k, None)
+            v = trial.get(k, None)
             if v is None:
                 keys.append((1, 0))
             else:

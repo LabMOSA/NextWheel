@@ -1,6 +1,7 @@
-import numpy as  np
+import numpy as np
 from typing import Sequence, Callable, Any
 import math
+
 
 def margin_trials(
     trials: list[dict],
@@ -15,7 +16,7 @@ def margin_trials(
     """
     Remove near-duplicate trials based on relative/absolute tolerances applied to Y.
 
-    This function builds a discrete key for each trial by quantizing each Y component
+    This function builds a discrete key for each trial by quantifying each Y component
     using a per-sample tolerance:
 
         tol_ij = max(min_tol[j], pct[j] * abs(Y[i, j]))
@@ -46,7 +47,7 @@ def margin_trials(
     Returns
     -------
     kept_idx : np.ndarray
-        Sorted array of unique indices (dtype int) in [0..n_trials-1] of retained trials.
+        Sorted array of unique indices (dtype int) in [0...n_trials-1] of retained trials.
     """
     Y = np.asarray(Y, float)
     pct = np.asarray(pct, float).ravel()
@@ -58,7 +59,9 @@ def margin_trials(
     if Y.shape[0] != n:
         raise ValueError("Y must have the same number of rows as trials.")
     if pct.size != Y.shape[1] or min_tol.size != Y.shape[1]:
-        raise ValueError("pct and min_tol must have the same length as the number of Y columns.")
+        raise ValueError(
+            "pct and min_tol must have the same length as the number of Y columns."
+        )
     if np.any(pct <= 0) or np.any(min_tol <= 0):
         raise ValueError("pct and min_tol must be strictly positive (> 0).")
 
@@ -105,6 +108,7 @@ def margin_trials(
     kept_idx = np.array(sorted(set(kept)), dtype=int)
     return kept_idx
 
+
 def zone_id_from_Y_ranges(
     Y: np.ndarray,
     edges_per_axis: Sequence[np.ndarray],
@@ -124,7 +128,7 @@ def zone_id_from_Y_ranges(
         A sequence of 1D arrays of bin edges for each selected axis.
         Each edges array must have length >= 2.
     axes : Sequence[int] | None, optional
-        Indices of Y columns to use. If None, uses [0..len(edges_per_axis)-1].
+        Indices of Y columns to use. If None, uses [0...len(edges_per_axis)-1].
 
     Returns
     -------
@@ -165,6 +169,7 @@ def zone_id_from_Y_ranges(
 
     return zone
 
+
 def default_score_fn(X: np.ndarray, idxes: np.ndarray) -> np.ndarray:
     """
     Simple "informativeness" score without PCA.
@@ -196,7 +201,6 @@ def default_score_fn(X: np.ndarray, idxes: np.ndarray) -> np.ndarray:
     return np.linalg.norm(Xs[idxes], axis=1)
 
 
-
 def build_choice_groups_by_zone(
     trials: list[dict],
     X: np.ndarray,
@@ -207,8 +211,39 @@ def build_choice_groups_by_zone(
     axes_for_ranges: Sequence[int] | None = None,
     pct: np.ndarray | None = None,
     min_tol: np.ndarray | None = None,
-    max_candidates_per_group: int | None = None,
 ) -> dict[tuple[int], list[int]]:
+    """
+        Build candidate-choice groups keyed by a zone ID (and optionally deduplicate first).
+
+        Steps
+        -----
+        1) Optionally remove near-duplicates using `margin_trials` (based on Y tolerances).
+        2) Compute a zone ID for each trial using `zone_id_from_Y_ranges` if edges are provided.
+        3) Create groups: (zone_id,) -> list of global indices from the retained set.
+
+        Parameters
+        ----------
+        trials : list[dict]
+            Trial objects (used for length and passed to margin_trials).
+        X : np.ndarray
+            Feature matrix of shape (n_trials, n_features).
+        Y : np.ndarray
+            Output/label matrix of shape (n_trials, n_outputs).
+        seed : int, default=0
+            Random seed used by dedup selection (and any later random selection).
+        edges_per_axis : Sequence[np.ndarray] | None, optional
+            Bin edges per axis used to build zones. If None, all trials share the same zone.
+        axes_for_ranges : Sequence[int] | None, optional
+            Which Y columns to use for zoning. If None, uses [0...len(edges_per_axis)-1].
+        pct : np.ndarray | None, optional
+            Relative tolerance per Y column for deduplication. If provided, `min_tol` is required.
+        min_tol : np.ndarray | None, optional
+            Minimum absolute tolerance per Y column for deduplication.
+        Returns
+        -------
+        groups : dict[tuple[int], list[int]]
+            Mapping from group key (zone_id,) to a list of retained global indices.
+        """
 
     X = np.asarray(X, float)
     Y = np.asarray(Y, float)
@@ -217,22 +252,23 @@ def build_choice_groups_by_zone(
     if X.shape[0] != n or Y.shape[0] != n:
         raise ValueError("X and Y must have same number of rows as trials")
 
-    rng = np.random.default_rng(seed)
-
-    # --- 1) dedup -> indices globaux conservés ---
     if pct is not None:
         if min_tol is None:
             raise ValueError("min_tol must be provided when pct is not None")
         kept_idx = margin_trials(
-            trials, Y=Y, pct=pct, min_tol=min_tol,
-            X=X, score_fn=default_score_fn, seed=seed
+            trials,
+            Y=Y,
+            pct=pct,
+            min_tol=min_tol,
+            X=X,
+            score_fn=default_score_fn,
+            seed=seed,
         )
     else:
         kept_idx = np.arange(n, dtype=int)
 
     kept_idx = np.asarray(kept_idx, dtype=int)
 
-    # --- 2) zones calculées sur tout Y (OK) ---
     if edges_per_axis is None:
         zone_ranges = np.zeros(n, dtype=int)
     else:
@@ -240,7 +276,6 @@ def build_choice_groups_by_zone(
             Y, edges_per_axis=edges_per_axis, axes=axes_for_ranges
         ).astype(int)
 
-    # --- 3) groupes par zone mais seulement pour kept_idx ---
     groups: dict[tuple[int], list[int]] = {}
     for i in kept_idx.tolist():
         z = int(zone_ranges[i])
@@ -249,10 +284,25 @@ def build_choice_groups_by_zone(
 
     return groups
 
+
 def groups_to_list(groups: Any) -> list[list[int]]:
+    """
+    Normalize a grouping object into a list of index lists.
+
+    Parameters
+    ----------
+    groups : Any
+        Either a dict-like object (values are index lists) or an iterable of index lists.
+
+    Returns
+    -------
+    groups_list : list[list[int]]
+        List of groups, each group is a list of indices.
+    """
     if isinstance(groups, dict):
         return [list(v) for v in groups.values()]
     return [list(g) for g in groups]
+
 
 def generate_random_protocols(
     groups: Any,
@@ -260,22 +310,54 @@ def generate_random_protocols(
     *,
     seed: int = 0,
 ) -> list[list[int]]:
+    """
+    Generate random protocols by selecting one index from each group.
+
+    Parameters
+    ----------
+    groups : Any
+        Grouping (dict or list of groups). Each group is a list of candidate indices.
+    n_protocols : int
+        Number of protocols to generate.
+    seed : int, default=0
+        Random seed.
+
+    Returns
+    -------
+    protos : list[list[int]]
+        List of protocols. Each protocol is a list of chosen indices, one per group.
+    """
     rng = np.random.default_rng(seed)
     groups_list = groups_to_list(groups)
 
     protos: list[list[int]] = []
     for i in range(int(n_protocols)):
-        idxs = [int(rng.choice(g)) for g in groups_list]
-        protos.append(idxs)
+        idxes = [int(rng.choice(g)) for g in groups_list]
+        protos.append(idxes)
     return protos
 
 
-
-
-
 def count_all_protocols(groups: Any) -> int:
+    """
+    Count the total number of possible protocols (cartesian product of group sizes).
+
+    Parameters
+    ----------
+    groups : Any
+        Grouping (dict or list of groups). Each group is a list of candidate indices.
+
+    Returns
+    -------
+    total : int
+        Total number of possible protocols.
+
+    Raises
+    ------
+    ValueError
+        If at least one group is empty.
+    """
     groups_list = groups_to_list(groups)
     sizes = [len(g) for g in groups_list]
     if any(s == 0 for s in sizes):
-        raise ValueError("Il y a au moins un groupe vide.")
+        raise ValueError("At least one group is empty.")
     return math.prod(sizes)
