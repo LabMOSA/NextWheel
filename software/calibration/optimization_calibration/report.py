@@ -67,3 +67,14 @@ def export_json(rows: list[ReportRow], path: str) -> None:
     ]
     with open(path, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2, ensure_ascii=False)
+
+def select_plateau(best: Sequence[tuple], portion_kept: float, max_kept: int) -> Sequence[tuple]:
+    """
+    Select the plateau of top trials based on score.
+    """
+    if not best:
+        return []
+    best_score = best[0].score
+    kept = [int(len(best) * portion_kept), max_kept]
+    return kept
+
