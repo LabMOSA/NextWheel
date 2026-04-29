@@ -1,5 +1,5 @@
 import numpy as np
-from .types import InfluenceConfig, InfluenceResult
+from .calibration_types import InfluenceConfig, InfluenceResult
 
 
 def compute_predictions(

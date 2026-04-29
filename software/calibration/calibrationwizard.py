@@ -5,7 +5,7 @@ import kineticstoolkit as ktk
 import nextwheel
 from software.python.nextwheel import NextWheel
 
-import wheelcalibration as wc
+import software.calibration.wheelcalibration as wc
 import limitedinteraction as li
 import time
 import os
@@ -523,33 +523,33 @@ def safe_measure(next_wheel: NextWheel, waiting_time: int = 5) -> dict:
             pass
         li.message("Measurement complete.", title="Measuring...", icon="check")
 
-def save_file(data: dict, file_name: str, path: str):
-    """
-    Save file with Kinetics Toolskit.
-
-    The function doesn't overwrite any file.
-
-    Parameters
-    ----------
-    data :
-        The fectched data from the measure function.
-    file_name :
-        The file name of the new created file.
-    path :
-        The path where the file is saved.
-
-    Returns
-    -------
-    None.
-
-    """
-    path = Path(path)
-    path.mkdir(parents=True, exist_ok=True)
-
-    n_trial = 0
-    while os.path.isfile(f"{path}{file_name}{n_trial}"):  # not overwriting
-        n_trial += 1
-    ktk.save(f"{path}{file_name}{n_trial}", data)
+# def save_file(data: dict, file_name: str, path: str):
+#     """
+#     Save file with Kinetics Toolskit.
+#
+#     The function doesn't overwrite any file.
+#
+#     Parameters
+#     ----------
+#     data :
+#         The fectched data from the measure function.
+#     file_name :
+#         The file name of the new created file.
+#     path :
+#         The path where the file is saved.
+#
+#     Returns
+#     -------
+#     None.
+#
+#     """
+#     path = Path(path)
+#     path.mkdir(parents=True, exist_ok=True)
+#
+#     n_trial = 0
+#     while os.path.isfile(f"{path}{file_name}{n_trial}"):  # not overwriting
+#         n_trial += 1
+#     ktk.save(f"{path}{file_name}{n_trial}", data)
 
 def save_file(data: dict, file_name: str, path) -> Path:
     path = Path(path)
@@ -810,16 +810,14 @@ if __name__ == "__main__":
 #
 # calibrate_part2(nw, path + trials_dir)
 
-# %% Part 3 - More static Force mesures for calibration matrix
-
-calibrate_part3(nw, path + trials_dir)
-while not li.button_dialog(
-    "Do you want to do another measure ?",
-    choices=["Oui", "Non"],
-    title="Force Measures for Calibration Matrix",
-    icon="gear",
-):
     calibrate_part3(nw, path + trials_dir)
+    while not li.button_dialog(
+        "Do you want to do another measure ?",
+        choices=["Oui", "Non"],
+        title="Force Measures for Calibration Matrix",
+        icon="gear",
+    ):
+        calibrate_part3(nw, path + trials_dir)
 
 # %% Part 4 - Calibration matrix calculation
 # A, Trials = estimate_calibration_matrix(path + trials_dir)

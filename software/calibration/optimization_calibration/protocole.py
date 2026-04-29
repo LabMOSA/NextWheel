@@ -1,12 +1,12 @@
 from typing import Callable, Sequence, Any
 import numpy as np
-
 from software.calibration.optimization_calibration.recommand_protocol import list_trials_pretty
-from software.calibration.optimization_calibration.types import (
+from software.calibration.optimization_calibration.calibration_types import (
     FitConfig,
     MonteCarloConfig,
     ProtocolEval
 )
+
 from software.calibration.optimization_calibration.features import build_XY
 from software.calibration.optimization_calibration.fit import fit
 from software.calibration.optimization_calibration.metrics import rmse_total, r2_total, rmse_per_axis, r2_per_axis
@@ -25,7 +25,6 @@ def _finite_or_nan(x: float) -> float:
 
 def _get(trial: dict, key: str, default=None):
         return trial.get(key, default)
-
 
 def default_trial_id(trial: dict):
     return _get(trial, "__file__", None)

@@ -9,7 +9,7 @@ from software.calibration.cross_validation import (
 from software.calibration.calculate_base_AccBias import load_fixed_imu_params
 from software.calibration.optimization_2_planes.features import build_XY
 from software.calibration.optimization_2_planes.fit import fit_two_planes
-from software.calibration.optimization_2_planes.outliers import get_worst_residual_trials, remove_outliers_by_residual
+from software.calibration.optimization_calibration.outliers import get_worst_residual_trials
 from software.calibration.optimization_2_planes.types import FitResultTwoPlanes
 from software.calibration.optimization_2_planes import FitConfig
 from software.calibration.optimization_calibration.metrics import (

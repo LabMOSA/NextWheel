@@ -1,5 +1,11 @@
+from pathlib import Path
+
 import numpy as np
 from typing import Sequence, Any
+
+from software.calibration.calculate_base_AccBias import load_fixed_imu_params
+from software.calibration.cross_validation import load_force_trials
+from software.calibration.optimization_calibration.features import build_XY
 
 
 def get_worst_residual_trials(
@@ -68,7 +74,7 @@ def remove_outliers_by_residual(
         If int: use only that axis residuals (e.g., 1 for Fy).
         If None: use L2 norm of residual vector across all axes.
     method : str
-        "top_k": removes the top_k largest residuals
+        "top_k": removes the top_k the largest residuals
         "quantile": removes samples with |res| > quantile(|res|)
         "sigma": removes samples with |res| > mean(|res|) + n_sigma*std(|res|)
 
@@ -130,3 +136,55 @@ def remove_outliers_by_residual(
     removed.sort(key=lambda d: d["score"], reverse=True)
 
     return y_true_f, y_pred_f, trials_f, removed
+
+def find_removed_trials():
+    # --- Chargement des données ---
+    path = Path(__file__).resolve().parent.parent
+    imu_dir = path / "E1_E2"
+    packages_root = path / "trials_organized"
+
+    trials = load_force_trials(packages_root)
+    base, acc_bias, imu_info = load_fixed_imu_params(imu_dir)
+
+    # --- Construction des matrices ---
+    X, y_true, _ = build_XY(trials, acc_bias, base)
+
+    # ------------------------------------------------------------------
+    ROOT = Path.cwd().parent
+    directory = ROOT / "matrix_A_offset"
+    z = np.load(ROOT / "matrix_A_offset.npz")
+    A = z["A"]
+    y_scale = z["y_scale"]
+
+    y_pred = X @ A.T
+    y_pred = y_pred * y_scale[None, :]
+    # ------------------------------------------------------------------
+
+
+    # --- Suppression des outliers sur tous les axes ---
+    y_true_f, y_pred_f, trials_f, removed = remove_outliers_by_residual(
+        y_true,
+        y_pred,
+        trials,
+        axis=None,
+        method="quantile",
+        quantile=0.95,
+    )
+    removed_trials = [trials[item["idx"]] for item in removed]
+
+    # --- Affichage ---
+    print(f"Nombre total de trials : {len(trials)}")
+    print(f"Nombre de trials supprimés : {len(removed_trials)}")
+    print()
+
+    for k, item in enumerate(removed, start=1):
+        print(f"[{k}] idx={item['idx']}")
+        print(f"    score = {item['score']:.6f}")
+        print(f"    path  = {item['path']}")
+        print(f"    residual = {item['residual']}")
+        print()
+
+    return removed_trials, removed, trials_f, y_true_f, y_pred_f
+
+if __name__ == "__main__":
+    removed_trials, removed, trials_f, y_true_f, y_pred_f = find_removed_trials()

@@ -6,11 +6,11 @@ from software.calibration.cross_validation import (
     load_force_trials,
 )
 from software.calibration.calculate_base_AccBias import load_fixed_imu_params
-from software.calibration.optimization_2_planes.outliers import remove_outliers_by_residual
+from software.calibration.optimization_calibration.outliers import remove_outliers_by_residual
 from software.calibration.optimization_2_planes.plot import plot_pred_vs_true, plot_residuals
 
 from software.calibration.optimization_calibration import FitConfig
-from software.calibration.optimization_calibration.features import build_XY, compute_scale
+from software.calibration.optimization_calibration.features import build_XY
 from software.calibration.optimization_calibration.fit import fit
 
 from software.calibration.optimization_calibration.metrics import (

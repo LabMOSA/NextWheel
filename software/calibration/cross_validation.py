@@ -7,22 +7,6 @@ import kineticstoolkit as ktk
 from collections import Counter
 
 
-# def load_force_trials(packages_trials: str | Path) -> list[dict]:
-#     root = Path(packages_trials)
-#     trials_calibration = []
-#     for pkg in sorted(root.iterdir()):
-#         print(f"Checking package: {pkg.name}")
-#         if not pkg.is_dir():
-#             continue
-#         for f in sorted(pkg.glob("ForcesForCalibrationMatrix*")):
-#             d = ktk.load(str(f))
-#             d["__file__"] = str(f)
-#             d["__package__"] = pkg.name
-#             trials_calibration.append(d)
-#     if not trials_calibration:
-#         raise FileNotFoundError(f"No force trials found under {root}")
-#     return trials_calibration
-
 def load_force_trials(packages_trials: Union[str, Path]) -> list[dict]:
     root = Path(packages_trials)
     if not root.exists():
@@ -58,7 +42,7 @@ def load_force_trials(packages_trials: Union[str, Path]) -> list[dict]:
 
     return trials_calibration
 
-def train_test_split_trials(trials: list[dict], test_ratio: float = 0.2, seed: int = 0, stratify_by_mass: bool = True):
+def train_test_split_trials(trials: list[dict], test_ratio: float = 0.4, seed: int = 0, stratify_by_mass: bool = True):
     rng = np.random.default_rng(seed)
 
     if not stratify_by_mass:

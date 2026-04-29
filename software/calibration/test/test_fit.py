@@ -7,8 +7,8 @@ from software.calibration.cross_validation import (
     load_force_trials,
 )
 from software.calibration.calculate_base_AccBias import load_fixed_imu_params
-from software.calibration.optimization_2_planes.outliers import remove_outliers_by_residual
-from software.calibration.optimization_2_planes.plot import plot_pred_vs_true, plot_residuals
+# from software.calibration.optimization_2_planes.outliers import remove_outliers_by_residual
+from software.calibration.optimization_calibration.plot import plot_pred_vs_true, plot_residuals
 
 from software.calibration.optimization_calibration import FitConfig
 from software.calibration.optimization_calibration.features import build_XY, compute_scale
@@ -62,7 +62,17 @@ results = fit(X_train, Y_train_n, fit_configuration)
 
 A = results.A
 b0 = getattr(results, "b0", None)
+out_dir = Path(__file__).resolve().parent.parent / "matrix_A_offset"
+out_dir.mkdir(parents=True, exist_ok=True)
 
+out_directory = out_dir / "calibration_matrix.npz"
+np.savez(
+    out_directory,
+    A = A,
+    b0 = b0,
+    y_scale = y_scale,
+)
+print(f"y_scale: {y_scale}")
 # ----------------------------
 # Predict (normalized) then DE-normalize back to physical units
 # Convention: Y_pred = X @ A.T (+ b0)
@@ -134,8 +144,8 @@ print("R2 axes   :", r2_per_axis)
 # ----------------------------
 # Plots (physical units)
 # ----------------------------
-plot_pred_vs_true(Y_test, Y_pred_test, title_prefix="Calibration — Test (denorm)", split_forces_moments=True)
-plot_residuals(Y_test, Y_pred_test, title_prefix="Calibration — Test (denorm)", split_forces_moments=True)
+plot_pred_vs_true(Y_all, Y_pred_all, title_prefix="Calibration — Test (denorm)", split_forces_moments=True)
+plot_residuals(Y_all, Y_pred_all, title_prefix="Calibration — Test (denorm)", split_forces_moments=True)
 plt.show()
 
 # ----------------------------
@@ -186,14 +196,14 @@ for i, r, yt, yp, trial in worst_my:
     print(f"Trial {trial['__file__']}")
     print(f"Trial {i:3d} | My true = {yt:7.2f} | My pred = {yp:7.2f} | residual = {r:7.2f}")
 
-y_true_f, y_pred_f, trials_f, removed = remove_outliers_by_residual(
-    y_true=Y_all,
-    y_pred=Y_pred_all,
-    trials=trials,
-    axis=None,              # <-- tous les axes (norme L2)
-    method="quantile",
-    quantile=0.98,          # top 2%
-)
+# y_true_f, y_pred_f, trials_f, removed = remove_outliers_by_residual(
+#     y_true=Y_all,
+#     y_pred=Y_pred_all,
+#     trials=trials,
+#     axis=None,              # <-- tous les axes (norme L2)
+#     method="quantile",
+#     quantile=0.98,          # top 2%
+# )
 
 AXES = ("Fx", "Fy", "Fz", "Mx", "My", "Mz")
 
@@ -211,5 +221,3 @@ def print_removed_outliers(removed, y_true, y_pred, trials, top=50):
             f"[{k+1:02d}] idx={i:3d} score(L2)={r['score']:.3f} "
             f"path={trials[i].get('__file__','<unknown>')} | top: {top_axes}"
         )
-
-print_removed_outliers(removed, Y_all, Y_pred_all, trials, top=30)

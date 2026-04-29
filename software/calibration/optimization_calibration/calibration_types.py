@@ -118,7 +118,7 @@ class ProtocolSpec:
             f"positions={self.positions} max_per_condition={self.max_per_condition}"
         )
 
-dataclass(frozen=True)
+@dataclass(frozen=True)
 class ProtocolSpecZone:
     name: str
     masses: tuple[Any, ...] | None = None

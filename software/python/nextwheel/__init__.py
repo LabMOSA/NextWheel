@@ -262,29 +262,29 @@ class NextWheel:
         -------
         offset
             The position of the next message in the stream.
-            
+
 
         """
         if type(stream) is not bytes:
             return
-        
+
         if offset >= len(stream):
             return offset
-        
+
         # Extract the type of message
         (frame_type, timestamp, data_size) = struct.unpack(
             "<BQB", stream[offset:offset+10]
         )
         offset += 10
         time = timestamp / 1e6 - self.TIME_ZERO
-        
+
         # Process the frame
         if frame_type == FrameType.CONFIG:
 
             # Config frame (should always be first)
             data = stream[offset:offset + data_size]
             offset += data_size
-        
+
             self.TIME_ZERO = timestamp / 1e6
 
             (
@@ -365,10 +365,10 @@ class NextWheel:
 
             for sub_count in range(data_size):  # data_size = number of frames
                 offset = self._parse_message(stream, offset)
-                
+
         else:
             raise ValueError(f"Received an unknown frame type: {frame_type}")
-            
+
         return offset
 
 
@@ -411,9 +411,9 @@ class NextWheel:
 
     def start_streaming(
         self,
-        max_imu_samples: int = 1000,
-        max_analog_samples: int = 1000,
-        max_encoder_samples: int = 100,
+        max_imu_samples: int = 100000,
+        max_analog_samples: int = 100000,
+        max_encoder_samples: int = 100000,
         max_power_samples: int = 10,
     ):
         """
@@ -878,9 +878,9 @@ def read_dat(filename) -> dict:
     offset = 0
     with open(filename, "rb") as fid:
         stream = fid.read()
-        
+
     while (new_offset := nw._parse_message(stream, offset)) > offset:
         offset = new_offset
-        
+
 
     return nw.fetch()

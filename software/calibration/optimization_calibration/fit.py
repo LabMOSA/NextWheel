@@ -1,4 +1,4 @@
-from software.calibration.optimization_calibration.types import FitConfig, FitResult
+from software.calibration.optimization_calibration.calibration_types import FitConfig, FitResult
 import numpy as np
 
 def _argument_intercept(X: np.ndarray) -> np.ndarray:

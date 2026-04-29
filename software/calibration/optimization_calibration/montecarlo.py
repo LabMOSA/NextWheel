@@ -1,10 +1,10 @@
 from typing import Sequence
 import numpy as np
 
-from software.calibration.optimization_calibration.features import build_XY
-from software.calibration.optimization_calibration.types import MonteCarloConfig, MonteCarloResult
-from software.calibration.optimization_calibration.types import FitConfig
-from software.calibration.optimization_calibration.fit import fit
+from features import build_XY
+from calibration_types import MonteCarloConfig, MonteCarloResult
+from calibration_types import FitConfig
+from fit import fit
 
 def _fit_from_trials(trials, acc_bias, base, fit_configuration: FitConfig):
     """

@@ -1,4 +1,4 @@
-from .types import (
+from .calibration_types import (
     FitConfig,
     InfluenceConfig,
     InfluenceConfig,

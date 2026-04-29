@@ -1,6 +1,6 @@
 from typing import Sequence
 import numpy as np
-from software.calibration.optimization_calibration.types import (
+from software.calibration.optimization_calibration.calibration_types import (
     NormalizeConfig,
     BuildXYFn,
 )

@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Any, Optional, Sequence, List
 import numpy as np
-from software.calibration.optimization_calibration.types import ProtocolEval, TrialMeta
+from software.calibration.optimization_calibration.calibration_types import ProtocolEval, TrialMeta
 
 PLAN_DIRS = {"FxFyMz": "FxFyMz", "MxMyFz": "MxMyFz"}
 def infer_plane_from_path(file_path: Any) -> Optional[str]:
