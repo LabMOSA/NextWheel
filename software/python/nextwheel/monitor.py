@@ -99,40 +99,40 @@ def monitor(nw):
         #         text += f"    Recording to {current_state['filename']}\n"
 
         # Get data
-        data = nw.fetch()
+        ts = nw.fetch()
 
         try:
-            voltage = data["Power"]["Voltage"][-1]
+            voltage = ts["Power"].data["Voltage"][-1]
         except IndexError:
             pass
 
         try:
-            current = data["Power"]["Current"][-1]
+            current = ts["Power"].data["Current"][-1]
         except IndexError:
             pass
 
         try:
-            acc = data["IMU"]["Acc"][-1]
+            acc = ts["IMU"].data["Acc"][-1]
         except IndexError:
             pass
 
         try:
-            gyro = data["IMU"]["Gyro"][-1]
+            gyro = ts["IMU"].data["Gyro"][-1]
         except IndexError:
             pass
 
         try:
-            mag = data["IMU"]["Mag"][-1]
+            mag = ts["IMU"].data["Mag"][-1]
         except IndexError:
             pass
 
         try:
-            encoder = data["Encoder"]["Angle"][-1]
+            encoder = ts["Encoder"].data["Angle"][-1]
         except IndexError:
             pass
 
         try:
-            forces = data["Analog"]["Force"][-1]
+            forces = ts["Analog"].data["Force"][-1]
         except IndexError:
             pass
 

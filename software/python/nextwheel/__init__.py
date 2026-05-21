@@ -28,6 +28,24 @@ import requests
 import os
 import json
 
+try:
+    from kineticstoofflkit import TimeSeries
+except ModuleNotFoundError:
+
+    class TimeSeries:
+        def __init__(
+            self,
+            time=[],
+            data: dict[str, np.array] = {},
+        ):
+            self.time = time
+            self.data = data
+        def __str__(self):
+            return "Object with attributes time and data"
+        def __repr__(self):
+            return "Object with attributes time and data"
+
+
 # Constants
 
 GRAVITY = 9.80665
@@ -231,16 +249,15 @@ class NextWheel:
 
         # Calibration constants
 
-        try:
-            self.file_download("Calibration.json")
-            with open("Calibration.json", "r") as json_file:
-                self.CALIBRATION = json.load(json_file)
-            self.CALIBRATION_MATRIX = np.array(self.CALIBRATION["Matrix"])
-            self.CALIBRATION_OFFSET = np.array(self.CALIBRATION["Offset"])
-        except:
-            self.CALIBRATION_MATRIX = np.identity(6)
-            self.CALIBRATION_OFFSET = np.zeros((6,))
-            print("No Calibration File Detected")
+        self.file_download("Calibration.json")
+        with open("Calibration.json", "r") as json_file:
+            self.CALIBRATION = json.load(json_file)
+        self.CALIBRATION_MATRIX = np.array(self.CALIBRATION["Matrix"])
+        self.CALIBRATION_OFFSET = np.array(self.CALIBRATION["Offset"])
+        # except:
+        #     self.CALIBRATION_MATRIX = np.identity(6)
+        #     self.CALIBRATION_OFFSET = np.zeros((6,))
+        #     print("No Calibration File Detected")
 
     def _parse_message(self, stream: bytes, offset: int = 0) -> int:
         """
@@ -262,29 +279,29 @@ class NextWheel:
         -------
         offset
             The position of the next message in the stream.
-            
+
 
         """
         if type(stream) is not bytes:
             return
-        
+
         if offset >= len(stream):
             return offset
-        
+
         # Extract the type of message
         (frame_type, timestamp, data_size) = struct.unpack(
-            "<BQB", stream[offset:offset+10]
+            "<BQB", stream[offset : offset + 10]
         )
         offset += 10
         time = timestamp / 1e6 - self.TIME_ZERO
-        
+
         # Process the frame
         if frame_type == FrameType.CONFIG:
 
             # Config frame (should always be first)
-            data = stream[offset:offset + data_size]
+            data = stream[offset : offset + data_size]
             offset += data_size
-        
+
             self.TIME_ZERO = timestamp / 1e6
 
             (
@@ -305,7 +322,7 @@ class NextWheel:
             self._config.encoder_sampling_rate = encoder_sampling_rate
 
         elif frame_type == FrameType.ADC:  # frame type of the ADC values
-            data = stream[offset:offset + data_size]
+            data = stream[offset : offset + data_size]
             offset += data_size
 
             self._adc_values.append(
@@ -316,7 +333,7 @@ class NextWheel:
                 self._adc_values.pop(0)
 
         elif frame_type == FrameType.IMU:  # frame type of the IMU
-            data = stream[offset:offset + data_size]
+            data = stream[offset : offset + data_size]
             offset += data_size
 
             self._imu_values.append(
@@ -340,7 +357,7 @@ class NextWheel:
                 self._imu_values.pop(0)
 
         elif frame_type == FrameType.POWER:  # frame type of the POWER
-            data = stream[offset:offset + data_size]
+            data = stream[offset : offset + data_size]
             offset += data_size
 
             self._power_values.append(
@@ -351,7 +368,7 @@ class NextWheel:
                 self._power_values.pop(0)
 
         elif frame_type == FrameType.ENCODER:  # frame type of the ENCODER
-            data = stream[offset:offset + data_size]
+            data = stream[offset : offset + data_size]
             offset += data_size
 
             self._encoder_values.append(
@@ -365,12 +382,11 @@ class NextWheel:
 
             for sub_count in range(data_size):  # data_size = number of frames
                 offset = self._parse_message(stream, offset)
-                
+
         else:
             raise ValueError(f"Received an unknown frame type: {frame_type}")
-            
-        return offset
 
+        return offset
 
     def _on_message(self, ws, message):
         """
@@ -559,13 +575,15 @@ class NextWheel:
         def on_timer(_):
             self._mutex.acquire()
             adc_values = np.zeros((self.max_analog_samples, 9))
-            adc_values[-len(self._adc_values):] = np.array(self._adc_values)
+            adc_values[-len(self._adc_values) :] = np.array(self._adc_values)
 
             imu_values = np.zeros((self.max_imu_samples, 10))
-            imu_values[-len(self._imu_values):] = np.array(self._imu_values)
+            imu_values[-len(self._imu_values) :] = np.array(self._imu_values)
 
             encoder_values = np.zeros((self.max_encoder_samples, 2))
-            encoder_values[-len(self._encoder_values):] = np.array(self._encoder_values) % 4000
+            encoder_values[-len(self._encoder_values) :] = (
+                np.array(self._encoder_values) % 4000
+            )
             self._mutex.release()
 
             try:
@@ -608,13 +626,13 @@ class NextWheel:
 
         self.stop_streaming()
 
-    def fetch(self) -> dict[str, dict[str, np.ndarray]]:
+    def fetch(self) -> dict[str, TimeSeries]:
         """
         Fetch data and return a nested dictionary. Clear the buffer.
 
         Returns
         -------
-        data : dict[str, dict[str, np.ndarray]]
+        data : dict[str, TimeSeries]
             A dictionary of multiple dictionaries that contain latest
             informations on:
                 - IMU values
@@ -630,18 +648,22 @@ class NextWheel:
         encoder_values = np.array(self._encoder_values)
         power_values = np.array(self._power_values)
 
-        # Reset the buffers
-        self._adc_values = []
-        self._imu_values = []
-        self._encoder_values = []
-        self._power_values = []
+        if len(adc_values) == 0:
+            adc_values = np.zeros((0, 7))
+        if len(imu_values) == 0:
+            imu_values = np.zeros((0, 10))
+        if len(encoder_values) == 0:
+            encoder_values = np.zeros((0, 2))
+        if len(power_values) == 0:
+            power_values = np.zeros((0, 4))
+
+        # # Reset the buffers
+        # self._adc_values = []
+        # self._imu_values = []
+        # self._encoder_values = []
+        # self._power_values = []
 
         self._mutex.release()
-
-        has_imu = len(imu_values) > 0
-        has_adc = len(adc_values) > 0
-        has_enc = len(encoder_values) > 0
-        has_pow = len(power_values) > 0
 
         if len(adc_values) > 0:
             adc_values[:, 1:7] = (
@@ -649,31 +671,30 @@ class NextWheel:
                 - self.CALIBRATION_OFFSET
             )
 
-        # Output
-        data = {
-            "IMU": {
-                "Time": imu_values[:, 0] if has_imu > 0 else np.array([]),
-                "Acc": imu_values[:, 1:4] if has_imu > 0 else np.array([]),
-                "Gyro": imu_values[:, 4:7] if has_imu > 0 else np.array([]),
-                "Mag": imu_values[:, 7:] if has_imu > 0 else np.array([]),
+        data = {}
+        data["IMU"] = TimeSeries(
+            time=imu_values[:, 0],
+            data={
+                "Acc": imu_values[:, 1:4],
+                "Gyro": imu_values[:, 4:7],
+                "Mag": imu_values[:, 7:],
             },
-            "Analog": {
-                "Time": adc_values[:, 0] if has_adc > 0 else np.array([]),
-                "Force": adc_values[:, 1:7] if has_adc > 0 else np.array([]),
-                "Spare": adc_values[:, 7:] if has_adc > 0 else np.array([]),
+        )
+        data["Analog"] = TimeSeries(
+            time=adc_values[:, 0],
+            data={"Force": adc_values[:, 1:7], "Spare": adc_values[:, 7:]},
+        )
+        data["Encoder"] = TimeSeries(
+            time=encoder_values[:, 0], data={"Angle": encoder_values[:, 1]}
+        )
+        data["Power"] = TimeSeries(
+            time=power_values[:, 0],
+            data={
+                "Voltage": power_values[:, 1],
+                "Current": power_values[:, 2],
+                "Power": power_values[:, 3],
             },
-            "Encoder": {
-                "Time": encoder_values[:, 0] if has_enc > 0 else np.array([]),
-                "Angle": encoder_values[:, 1] if has_enc > 0 else np.array([]),
-            },
-            "Power": {
-                "Time": power_values[:, 0] if has_pow > 0 else np.array([]),
-                "Voltage": power_values[:, 1] if has_pow > 0 else np.array([]),
-                "Current": power_values[:, 2] if has_pow > 0 else np.array([]),
-                "Power": power_values[:, 3] if has_pow > 0 else np.array([]),
-            },
-        }
-
+        )
         return data
 
     def set_time(self, unix_time: int) -> dict:
@@ -878,9 +899,8 @@ def read_dat(filename) -> dict:
     offset = 0
     with open(filename, "rb") as fid:
         stream = fid.read()
-        
+
     while (new_offset := nw._parse_message(stream, offset)) > offset:
         offset = new_offset
-        
 
     return nw.fetch()
