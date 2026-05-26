@@ -24,12 +24,13 @@ import struct
 import threading
 import numpy as np
 from enum import IntEnum
+from typing import Any
 import requests
 import os
 import json
 
 try:
-    from kineticstoofflkit import TimeSeries
+    from kineticstoolkit import TimeSeries
 except ModuleNotFoundError:
 
     class TimeSeries:
@@ -37,6 +38,7 @@ except ModuleNotFoundError:
             self,
             time=[],
             data: dict[str, np.array] = {},
+            info: dict[str, dict[str, Any]] = {},
         ):
             self.time = time
             self.data = data
@@ -82,6 +84,7 @@ class GlobalConfig:
 
         # ADC CONFIG
         self.adc_rate = 240
+        self.has_calibration_matrix = False
 
         # ENCODER CONFIG
         self.encoder_rate = 240
@@ -104,7 +107,7 @@ class GlobalConfig:
         self._gyro_sensitivity_2000dps = 0.0609756
         self._mag_ut_lsb = 0.3
 
-    def convert_adc_values(self, values: np.ndarray) -> np.ndarray:
+    def convert_adc_int_to_volts(self, values: np.ndarray) -> np.ndarray:
         """
         Convert ADC values from ADC integers to volts.
 
@@ -125,7 +128,7 @@ class GlobalConfig:
             + self._adc_in_min
         )
 
-    def convert_accel_values(self, values: np.ndarray) -> np.ndarray:
+    def convert_accel_int_to_m_s2(self, values: np.ndarray) -> np.ndarray:
         """
         Convert acceleration values from integers to m/s2.
 
@@ -152,7 +155,7 @@ class GlobalConfig:
         except KeyError:
             raise ValueError("Invalid accel range")
 
-    def convert_gyro_values(self, values: np.ndarray) -> np.ndarray:
+    def convert_gyro_int_to_deg_s(self, values: np.ndarray) -> np.ndarray:
         """
         Convert gyro values from integers to deg/s.
 
@@ -252,14 +255,17 @@ class NextWheel:
         # Calibration constants
 
         self.file_download("Calibration.json")
-        with open("Calibration.json", "r") as json_file:
-            self.CALIBRATION = json.load(json_file)
-        self.CALIBRATION_MATRIX = np.array(self.CALIBRATION["Matrix"])
-        self.CALIBRATION_OFFSET = np.array(self.CALIBRATION["Offset"])
-        # except:
-        #     self.CALIBRATION_MATRIX = np.identity(6)
-        #     self.CALIBRATION_OFFSET = np.zeros((6,))
-        #     print("No Calibration File Detected")
+        try:
+            with open("Calibration.json", "r") as json_file:
+                self.CALIBRATION = json.load(json_file)
+            self.CALIBRATION_MATRIX = np.array(self.CALIBRATION["Matrix"])
+            self.CALIBRATION_OFFSET = np.array(self.CALIBRATION["Offset"])
+            self.has_calibration_matrix = True
+        except FileNotFoundError:
+            self.CALIBRATION_MATRIX = np.identity(6)
+            self.CALIBRATION_OFFSET = np.zeros((6,))
+            self.has_calibration_matrix = False
+            print("No Calibration File Detected")
 
     def _parse_message(self, stream: bytes, offset: int = 0) -> int:
         """
@@ -342,10 +348,10 @@ class NextWheel:
                 np.hstack(
                     [
                         [time],
-                        self._config.convert_accel_values(
+                        self._config.convert_accel_int_to_m_s2(
                             np.array(struct.unpack_from("<3h", data[:6]))
                         ),
-                        self._config.convert_gyro_values(
+                        self._config.convert_gyro_int_to_deg_s(
                             np.array(struct.unpack_from("<3h", data[6:12]))
                         ),
                         self._config.convert_mag_values(
@@ -539,13 +545,13 @@ class NextWheel:
         fig.canvas.mpl_connect("close_event", on_close)
 
         adc_plot = plt.subplot(4, 1, 1)
-        adc_plot.set_title("ADC")
+        adc_plot.set_title("Analogs")
         adc_lines = []
         for i in range(6):
             adc_lines.append(adc_plot.plot([])[0])
         adc_plot.set_xlim(0, self.max_analog_samples)
         adc_plot.set_ylim(0, 65536)
-        adc_plot.set_ylabel("Sampled value")
+        adc_plot.set_ylabel("Raw channels")
 
         accel_plot = plt.subplot(4, 1, 2)
         accel_plot.set_title("Accelerometers")
@@ -563,7 +569,7 @@ class NextWheel:
             gyro_lines.append(gyro_plot.plot([])[0])
         gyro_plot.set_xlim(0, self.max_imu_samples)
         gyro_plot.set_ylim(-1000, 1000)
-        gyro_plot.set_ylabel("Unit to be defined")
+        gyro_plot.set_ylabel("deg/s")
 
         encoder_plot = plt.subplot(4, 1, 4)
         encoder_plot.set_title("Encoder")
@@ -632,6 +638,36 @@ class NextWheel:
         """
         Fetch data and return a nested dictionary. Clear the buffer.
 
+        Returns a dictionary of multiple TimeSeries, the dictionary having
+        these keys:
+        - Analog:
+            TimeSeries that corresponds to the ADC values, and that contains
+            these data:
+                "Channels": Nx6 raw uncalibrated voltage values as integers.
+                "Force": Nx4 force in newtons in the form [Fx, Fy, Fz, 0.0].
+                "Moment": Nx4 moment in Nm in the form [Mx, My, Mz, 0.0].
+            Force and Moment are present only if a calibration matrix was
+            found.
+        - IMU:
+            TimeSeries that corresponds to the Inertial Measurement Unit, and
+            that contains these data:
+                "Acc": Nx4 acceleration in m/s2, in the form
+                    [acc_x, acc_y, acc_z, 0.0]
+                "Gyro": Nx4 angular speed in rad/s, in the form
+                    [w_x, w_y, w_z, 0.0]
+                "Mag": Nx4 magnetometer values, uncalibrated, in the form
+                    [mag_x, mag_y, mag_z, 0.0]
+        - Encoder:
+            TimeSeries that corresponds to the angular encoder, and that
+            contains this data:
+                "Angle": series of N angles (currently non calibrated).
+        - Power:
+            TimeSeries that corresponds to the electric power meter, and that
+            contains these data:
+                "Voltage": series of N battery voltages in Volts.
+                "Current": series of N battery currents in Amperes.
+                "Power": series of N battery powers in Watts.
+
         Parameters
         ----------
         clear
@@ -642,12 +678,7 @@ class NextWheel:
         Returns
         -------
         data : dict[str, TimeSeries]
-            A dictionary of multiple dictionaries that contain latest
-            informations on:
-                - IMU values
-                - Analog values
-                - Encoder values
-                - Power values
+            A dictionary of multiple TimeSeries described above.
         """
         self._mutex.acquire()
 
@@ -675,13 +706,34 @@ class NextWheel:
 
         self._mutex.release()
 
-        if len(adc_values) > 0:
-            adc_values[:, 1:7] = (
+        if len(adc_values) > 0 and self.has_calibration_matrix:
+            calibrated_adc_values = (
                 np.dot(self.CALIBRATION_MATRIX, adc_values[:, 1:7].T).T
                 - self.CALIBRATION_OFFSET
             )
+        else:
+            calibrated_adc_values = adc_values
 
         data = {}
+        data["Analog"] = TimeSeries(time=adc_values[:, 0])
+        data["Analog"].data["Channels"] = adc_values[:, 1:8]
+        data["Analog"].info["Channels"] = {"Unit": "raw"}
+        if self.has_calibration_matrix:
+            data["Analog"].data["Force"] = np.zeros(
+                (calibrated_adc_values.shape[0], 4)
+            )
+            data["Analog"].data["Force"][:, 0:3] = calibrated_adc_values[
+                :, 0:3
+            ]
+            data["Analog"].info["Force"] = {"Unit": "N"}
+            data["Analog"].data["Moment"] = np.zeros(
+                (calibrated_adc_values.shape[0], 4)
+            )
+            data["Analog"].data["Moment"][:, 0:3] = calibrated_adc_values[
+                :, 3:6
+            ]
+            data["Analog"].info["Moment"] = {"Unit": "Nm"}
+
         data["IMU"] = TimeSeries(
             time=imu_values[:, 0],
             data={
@@ -689,13 +741,16 @@ class NextWheel:
                 "Gyro": imu_values[:, 4:7],
                 "Mag": imu_values[:, 7:],
             },
-        )
-        data["Analog"] = TimeSeries(
-            time=adc_values[:, 0],
-            data={"Force": adc_values[:, 1:7], "Spare": adc_values[:, 7:]},
+            info={
+                "Acc": {"Unit": "m/s2"},
+                "Gyro": {"Unit": "rad/s"},
+                "Mag": {"Unit": "uncalibrated"},
+            },
         )
         data["Encoder"] = TimeSeries(
-            time=encoder_values[:, 0], data={"Angle": encoder_values[:, 1]}
+            time=encoder_values[:, 0],
+            data={"Angle": encoder_values[:, 1]},
+            info={"Angle": {"Unit": "uncalibrated"}},
         )
         data["Power"] = TimeSeries(
             time=power_values[:, 0],
@@ -703,6 +758,11 @@ class NextWheel:
                 "Voltage": power_values[:, 1],
                 "Current": power_values[:, 2],
                 "Power": power_values[:, 3],
+            },
+            info={
+                "Voltage": {"Unit": "V"},
+                "Current": {"Unit": "A"},
+                "Power": {"Unit": "W"},
             },
         )
         return data
@@ -901,10 +961,10 @@ def read_dat(filename) -> dict:
     """
     # Create a dummy wheel to parse the data
     nw = NextWheel("0.0.0.0")
-    nw.max_analog_samples = np.Inf
-    nw.max_encoder_samples = np.Inf
-    nw.max_imu_samples = np.Inf
-    nw.max_power_samples = np.Inf
+    nw.max_analog_samples = np.inf
+    nw.max_encoder_samples = np.inf
+    nw.max_imu_samples = np.inf
+    nw.max_power_samples = np.inf
 
     offset = 0
     with open(filename, "rb") as fid:

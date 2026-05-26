@@ -72,7 +72,9 @@ def monitor(nw):
     gyro = None
     mag = None
     encoder = None
-    forces = None
+    channels = None
+    force = None
+    moment = None
     current_state = None
 
     i_refresh_state = 65535  # Current system state. Start with a refresh.
@@ -99,7 +101,7 @@ def monitor(nw):
         #         text += f"    Recording to {current_state['filename']}\n"
 
         # Get data
-        ts = nw.fetch()
+        ts = nw.fetch(clear=True)
 
         try:
             voltage = ts["Power"].data["Voltage"][-1]
@@ -132,7 +134,17 @@ def monitor(nw):
             pass
 
         try:
-            forces = ts["Analog"].data["Force"][-1]
+            channels = ts["Analog"].data["Channels"][-1]
+        except IndexError:
+            pass
+
+        try:
+            force = ts["Analog"].data["Force"][-1]
+        except IndexError:
+            pass
+
+        try:
+            moment = ts["Analog"].data["Moment"][-1]
         except IndexError:
             pass
 
@@ -171,10 +183,24 @@ def monitor(nw):
         if encoder is not None:
             text += "\nEncoder (ticks)\n" f"    {encoder:.2f}\n"
 
-        if forces is not None:
-            text += "\nForces (uncalibrated unit)\n"
+        if channels is not None:
+            text += (
+                f"\nADC Channels ({ts['Analog'].info['Channels']['Unit']})\n"
+            )
             for i in range(6):
-                text += f"    channel {i+1}: {forces[i]:.0f}\n"
+                text += f"    channel {i+1}: {channels[i]:.0f}\n"
+
+        if force is not None:
+            text += f"\nForce ({ts['Analog'].info['Force']['Unit']})\n"
+            text += f"    Fx: {force[0]:.2f}\n"
+            text += f"    Fy: {force[1]:.2f}\n"
+            text += f"    Fz: {force[2]:.2f}\n"
+
+        if moment is not None:
+            text += f"\nMoment ({ts['Analog'].info['Moment']['Unit']})\n"
+            text += f"    Mx: {moment[0]:.2f}\n"
+            text += f"    My: {moment[1]:.2f}\n"
+            text += f"    Mz: {moment[2]:.2f}\n"
 
         parent_conn.send(text)
 
