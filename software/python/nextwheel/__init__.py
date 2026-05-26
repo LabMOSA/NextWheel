@@ -863,11 +863,10 @@ class NextWheel:
 
         Returns
         -------
-        dict
+        None
 
         """
-        response = requests.get(f"http://{self.IP}/start_recording")
-        return json.loads(response.content)
+        requests.get(f"http://{self.IP}/start_recording")
 
     def stop_recording(self) -> dict:
         """
@@ -875,11 +874,10 @@ class NextWheel:
 
         Returns
         -------
-        dict
+        None
 
         """
-        response = requests.get(f"http://{self.IP}/stop_recording")
-        return json.loads(response.content)
+        requests.get(f"http://{self.IP}/stop_recording")
 
     def file_list(self) -> dict:
         """
@@ -935,13 +933,12 @@ class NextWheel:
 
         Returns
         -------
-        dict
+        None
 
         """
-        response = requests.get(
+        requests.get(
             f"http://{self.IP}/file_delete", params={"file": filename}
         )
-        return json.loads(response.content)
 
 
 def read_dat(filename) -> dict:
