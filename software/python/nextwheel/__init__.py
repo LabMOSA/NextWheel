@@ -40,8 +40,10 @@ except ModuleNotFoundError:
         ):
             self.time = time
             self.data = data
+
         def __str__(self):
             return "Object with attributes time and data"
+
         def __repr__(self):
             return "Object with attributes time and data"
 
@@ -626,9 +628,16 @@ class NextWheel:
 
         self.stop_streaming()
 
-    def fetch(self) -> dict[str, TimeSeries]:
+    def fetch(self, clear=False) -> dict[str, TimeSeries]:
         """
         Fetch data and return a nested dictionary. Clear the buffer.
+
+        Parameters
+        ----------
+        clear
+            True to clear the buffer so that every call to fetch returns new
+            data. False to return the whole buffer, which size is set by the
+            arguments of NextWheel.start_streaming().
 
         Returns
         -------
@@ -657,11 +666,12 @@ class NextWheel:
         if len(power_values) == 0:
             power_values = np.zeros((0, 4))
 
-        # # Reset the buffers
-        # self._adc_values = []
-        # self._imu_values = []
-        # self._encoder_values = []
-        # self._power_values = []
+        if clear:
+            # Reset the buffers
+            self._adc_values = []
+            self._imu_values = []
+            self._encoder_values = []
+            self._power_values = []
 
         self._mutex.release()
 
