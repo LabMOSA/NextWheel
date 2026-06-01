@@ -229,9 +229,14 @@ class NextWheel:
 
     """
 
-    def __init__(self, IP: str, *, debug: bool = False):
+    def __init__(
+        self,
+        IP: str = "",
+        *,
+        debug: bool = False,
+    ):
         # General configuration
-        self.IP = IP
+        self._IP = IP
         self.HEADER_LENGTH = 10
         self.TIME_ZERO = 0
         self.max_imu_samples = 0
@@ -252,8 +257,15 @@ class NextWheel:
         self._power_values = []  # type: list[np.ndarray]
         self._encoder_values = []  # type: list[np.ndarray]
 
-        # Calibration constants
+    @property
+    def IP(self):
+        return self._IP
 
+    @IP.setter
+    def IP(self, value):
+        """Validates and sets the salary value."""
+        self._IP = value
+        # Calibration constants
         self.file_download("Calibration.json")
         try:
             with open("Calibration.json", "r") as json_file:
@@ -957,7 +969,7 @@ def read_dat(filename) -> dict:
 
     """
     # Create a dummy wheel to parse the data
-    nw = NextWheel("0.0.0.0")
+    nw = NextWheel()
     nw.max_analog_samples = np.inf
     nw.max_encoder_samples = np.inf
     nw.max_imu_samples = np.inf
