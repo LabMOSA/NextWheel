@@ -28,6 +28,7 @@ from typing import Any
 import requests
 import os
 import json
+import time
 
 try:
     from kineticstoolkit import TimeSeries
@@ -229,11 +230,15 @@ class NextWheel:
 
     """
 
-    def __init__(self, IP: str, *, debug: bool = False):
+    def __init__(
+        self,
+        IP: str = "",
+        *,
+        debug: bool = False,
+    ):
         # General configuration
-        self.IP = IP
+        self._IP = IP
         self.HEADER_LENGTH = 10
-        self.TIME_ZERO = 0
         self.max_imu_samples = 0
         self.max_analog_samples = 0
         self.max_encoder_samples = 0
@@ -252,8 +257,15 @@ class NextWheel:
         self._power_values = []  # type: list[np.ndarray]
         self._encoder_values = []  # type: list[np.ndarray]
 
-        # Calibration constants
+    @property
+    def IP(self):
+        return self._IP
 
+    @IP.setter
+    def IP(self, value):
+        self._IP = value
+        self.set_time(time.time())
+        # Calibration constants
         self.file_download("Calibration.json")
         try:
             with open("Calibration.json", "r") as json_file:
@@ -297,11 +309,11 @@ class NextWheel:
             return offset
 
         # Extract the type of message
-        (frame_type, timestamp, data_size) = struct.unpack(
+        frame_type, timestamp, data_size = struct.unpack(
             "<BQB", stream[offset : offset + 10]
         )
         offset += 10
-        time = timestamp / 1e6 - self.TIME_ZERO
+        time = timestamp / 1e6
 
         # Process the frame
         if frame_type == FrameType.CONFIG:
@@ -309,8 +321,6 @@ class NextWheel:
             # Config frame (should always be first)
             data = stream[offset : offset + data_size]
             offset += data_size
-
-            self.TIME_ZERO = timestamp / 1e6
 
             (
                 accel_range,
@@ -781,10 +791,9 @@ class NextWheel:
         requests.Response
 
         """
-        response = requests.post(
+        requests.post(
             f"http://{self.IP}/config_set_time", params={"time": unix_time}
         )
-        return json.loads(response.content)
 
     def set_sensors_params(
         self,
@@ -957,7 +966,7 @@ def read_dat(filename) -> dict:
 
     """
     # Create a dummy wheel to parse the data
-    nw = NextWheel("0.0.0.0")
+    nw = NextWheel()
     nw.max_analog_samples = np.inf
     nw.max_encoder_samples = np.inf
     nw.max_imu_samples = np.inf
