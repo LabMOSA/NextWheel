@@ -1,0 +1,23 @@
+[tool.black]
+line-length = 79
+
+[tool.mypy]
+exclude = [
+]
+
+[[tool.mypy.overrides]]
+module = ["kineticstoolkit.*"]
+follow_untyped_imports = true
+
+[tool.pylint]
+load-plugins = ["pylint.extensions.docparams"]
+output-format = ["colorized"]
+
+[tool.pylint.MASTER]
+ignore = [
+]
+
+[tool.coverage.run]
+omit = [
+	"tests/*",
+]

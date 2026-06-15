@@ -13,11 +13,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-"""
-This Python module provides the NextWheel class that fetches data from an
-intrumented wheel.
-"""
+"""This Python module provides the NextWheel class that fetches data from an
+intrumented wheel."""
 
 import websocket
 import struct
@@ -33,11 +30,11 @@ try:
     from kineticstoolkit import TimeSeries
 except ModuleNotFoundError:
 
-    class TimeSeries:
+    class TimeSeries:  # type: ignore
         def __init__(
             self,
             time=[],
-            data: dict[str, np.array] = {},
+            data: dict[str, np.ndarray] = {},
             info: dict[str, dict[str, Any]] = {},
         ):
             self.time = time
@@ -80,7 +77,9 @@ class GlobalConfig:
         self.accel_range = 16
         self.gyro_range = 2000
         self.mag_range = 2500
-        self.imu_rate = 240
+        self.imu_sampling_rate = 240
+        self.adc_sampling_rate = 240
+        self.encoder_sampling_rate = 240
 
         # ADC CONFIG
         self.adc_rate = 240
@@ -221,7 +220,6 @@ class NextWheel:
     -------
     >>> from nextwheel import NextWheel
     >>> nw = NextWheel("196.168.1.254")
-    >>> nw.connect()
 
     >>> print(nw.fetch())
 
@@ -242,7 +240,7 @@ class NextWheel:
         self._debug = debug
 
         # Communication stuff
-        self.ws = None
+        self.ws : None | websocket.WebSocketApp = None
         self._mutex = threading.Lock()
         self._thread_is_running = False
 
@@ -288,16 +286,15 @@ class NextWheel:
         offset
             The position of the next message in the stream.
 
-
         """
         if type(stream) is not bytes:
-            return
+            raise ValueError("stream must be bytes.")
 
         if offset >= len(stream):
             return offset
 
         # Extract the type of message
-        (frame_type, timestamp, data_size) = struct.unpack(
+        frame_type, timestamp, data_size = struct.unpack(
             "<BQB", stream[offset : offset + 10]
         )
         offset += 10
@@ -502,8 +499,9 @@ class NextWheel:
         """
         Blocking function that monitors the sensors measurements.
 
-        This function shows the current sensor states in a simple GUI for
-        testing and monitoring. To log data, use NextWheel.fetch() instead.
+        This function shows the current sensor states in a simple GUI
+        for testing and monitoring. To log data, use NextWheel.fetch()
+        instead.
 
         """
         # Don't import until needed.
@@ -521,6 +519,7 @@ class NextWheel:
 
         """
         import matplotlib as mpl  # noqa
+        from cycler import cycler  # noqa
         import matplotlib.pyplot as plt  # noqa
         from matplotlib import animation  # noqa
 
@@ -533,7 +532,7 @@ class NextWheel:
         plt.pause(0.5)
 
         # Matplotlib defaults
-        mpl.rcParams["axes.prop_cycle"] = mpl.cycler(
+        mpl.rcParams["axes.prop_cycle"] = cycler(
             color=["r", "g", "b", "c", "m", "y", "k", "tab:orange"]
         )
         mpl.rcParams["figure.figsize"] = [10, 5]
@@ -679,6 +678,7 @@ class NextWheel:
         -------
         data : dict[str, TimeSeries]
             A dictionary of multiple TimeSeries described above.
+
         """
         self._mutex.acquire()
 
@@ -857,7 +857,7 @@ class NextWheel:
         response = requests.get(f"http://{self.IP}/system_state")
         return json.loads(response.content)
 
-    def start_recording(self) -> dict:
+    def start_recording(self) -> None:
         """
         Start recording data on the instrumented wheel.
 
@@ -868,7 +868,7 @@ class NextWheel:
         """
         requests.get(f"http://{self.IP}/start_recording")
 
-    def stop_recording(self) -> dict:
+    def stop_recording(self) -> None:
         """
         Stop recording data on the instrumented wheel.
 
@@ -922,7 +922,7 @@ class NextWheel:
         # filed download
         return 0
 
-    def file_delete(self, filename: str) -> dict:
+    def file_delete(self, filename: str) -> None:
         """
         Delete a file from the instrumented wheel.
 
@@ -958,10 +958,10 @@ def read_dat(filename) -> dict:
     """
     # Create a dummy wheel to parse the data
     nw = NextWheel("0.0.0.0")
-    nw.max_analog_samples = np.inf
-    nw.max_encoder_samples = np.inf
-    nw.max_imu_samples = np.inf
-    nw.max_power_samples = np.inf
+    nw.max_analog_samples = int(1E15)
+    nw.max_encoder_samples = int(1E15)
+    nw.max_imu_samples = int(1E15)
+    nw.max_power_samples = int(1E15)
 
     offset = 0
     with open(filename, "rb") as fid:

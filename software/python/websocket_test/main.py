@@ -42,8 +42,9 @@ def update_plots(i):
     Update the plots.
 
     This function updates the plots using global variables adc_values,
-    imu_values, power_values and encoder_values. It is normally called by
-    Matplotlib's FunctAnimation class.
+    imu_values, power_values and encoder_values. It is normally called
+    by Matplotlib's FunctAnimation class.
+
     """
     data = nw.fetch()
 

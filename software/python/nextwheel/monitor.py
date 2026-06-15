@@ -13,10 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-"""
-This Python module provides the GUI for the NextWheel.monitor method.
-"""
+"""This Python module provides the GUI for the NextWheel.monitor method."""
 
 import multiprocessing as mp
 import tkinter as tk
@@ -58,7 +55,12 @@ def _gui_app(conn, cwd: str):
 
 
 def monitor(nw):
-    """Implement NextWheel.monitor(). nw is the class instance."""
+    """
+    Implement NextWheel.monitor().
+
+    nw is the class instance.
+
+    """
     data = nw.fetch()  # Non-updated data: show the last data.
 
     parent_conn, child_conn = mp.Pipe()

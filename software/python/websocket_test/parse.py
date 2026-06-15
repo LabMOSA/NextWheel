@@ -1,8 +1,9 @@
 """
-Parse file logs from python app as Kinetics Toolkit TimeSeries
+Parse file logs from python app as Kinetics Toolkit TimeSeries.
 
 Requires:
     >> conda install -c conda-forge kineticstoolkit
+
 """
 
 import datetime
