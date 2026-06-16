@@ -1,6 +1,6 @@
-from nextwheel import NextWheel
 from datetime import datetime
 
+from nextwheel import NextWheel
 
 if __name__ == "__main__":
     # websocket.enableTrace(True)  # Uncomment to print all received data
@@ -9,5 +9,5 @@ if __name__ == "__main__":
 
     # Set device to current time (unix time)
     ret = nw.set_time(str(int(datetime.now().timestamp())))
-    print(f'set_time returned code: {ret.status_code} text: {ret.text}')
+    print(f"set_time returned code: {ret.status_code} text: {ret.text}")
     # nw.close()

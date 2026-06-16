@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
-import nextwheel
 import sys
-import time
+
+import nextwheel
 
 if __name__ == "__main__":
     ip = sys.argv[-1]

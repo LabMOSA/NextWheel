@@ -6,15 +6,13 @@ Requires:
 
 """
 
-import datetime
-import pandas as pd
 import kineticstoolkit.lab as ktk
 import matplotlib.pyplot as plt
+import pandas as pd
 
 
 def read_log(filename: str) -> ktk.TimeSeries:
     """Read log, format time in seconds since beginning."""
-
     # Read ADC
     df = pd.read_csv(filename)
     df.index = (
@@ -26,7 +24,7 @@ def read_log(filename: str) -> ktk.TimeSeries:
     return ktk.TimeSeries.from_dataframe(df)
 
 
-#%% ADC
+# %% ADC
 
 ts_adc = read_log("log_adc.csv")
 ts_adc.data["ch"] = ts_adc.data["ch"][:, 0:6]
@@ -35,13 +33,13 @@ plt.figure()
 ts_adc.plot()
 plt.title("ADC")
 
-#%% Sampling frequency histogram
+# %% Sampling frequency histogram
 
 plt.figure()
 plt.hist(ts_adc.time[1:] - ts_adc.time[0:-1], bins=100)
 plt.title("ADC Sampling rate distribution")
 
-#%% IMU
+# %% IMU
 
 ts_imu = read_log("log_imu.csv")
 plt.figure()

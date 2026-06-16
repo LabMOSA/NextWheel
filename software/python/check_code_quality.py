@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 """Check code quality before creating a code request."""
 
+import os
 import subprocess
 import webbrowser
-import os
 
 
 def _run_and_print(command: list[str]) -> None:
@@ -18,23 +18,16 @@ def _run_and_print(command: list[str]) -> None:
 
 
 def run_style_formatter() -> None:  # pragma: no cover
-    """Run style formatter (black)."""
+    """Run formatter (ruff)."""
     print("========================================")
-    print("Reformatting to black and numpydoc")
-    print("Running black...")
-    _run_and_print(["black", "nextwheel"])
-    print("Running docformatter...")
-    _run_and_print(
-        [
-            "docformatter",
-            "--style=numpy",
-            "--in-place",
-            "--recursive",
-            "--pre-summary-newline",
-            "--blank",
-            ".",
-        ]
-    )
+    _run_and_print(["ruff", "format", "."])
+
+
+def run_linter() -> None:  # pragma: no cover
+    """Run code quality review (ruff)."""
+    print("========================================")
+    print("Code Quality Review (ruff)")
+    _run_and_print(["ruff", "check", "--fix", "."])
 
 
 def run_static_type_checker() -> None:  # pragma: no cover
@@ -42,13 +35,6 @@ def run_static_type_checker() -> None:  # pragma: no cover
     print("========================================")
     print("Checking Static Types (mypy)")
     _run_and_print(["mypy", "nextwheel"])
-
-
-def run_pylint() -> None:  # pragma: no cover
-    """Run code quality review (pylint)."""
-    print("========================================")
-    print("Code Quality Review (pylint)")
-    _run_and_print(["pylint", "nextwheel"])
 
 
 def run_unit_tests() -> None:  # pragma: no cover
@@ -73,8 +59,8 @@ def run_unit_tests() -> None:  # pragma: no cover
 
 if __name__ == "__main__":  # pragma: no cover
     run_style_formatter()
+    run_linter()
     run_static_type_checker()
-    run_pylint()
     run_unit_tests()
     print("========================================")
     print("Completed.")

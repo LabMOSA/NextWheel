@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-#
 # Copyright 2023 NextWheel Developers
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,19 +11,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""This Python module provides the NextWheel class that fetches data from an
-intrumented wheel."""
 
-import websocket
+"""Provides the NextWheel class that fetches data from an intrumented wheel."""
+
+import json
+import os
 import struct
 import threading
-import numpy as np
 from enum import IntEnum
-from typing import Any
-import requests
-import os
-import json
 from time import time as get_current_time
+from typing import Any
+
+import numpy as np
+import requests
+import websocket
 
 try:
     from kineticstoolkit import TimeSeries
@@ -54,6 +53,8 @@ except ModuleNotFoundError:
 # Constants
 
 GRAVITY = 9.80665
+STANDARD_MAG_RANGE = 2500
+HTTP_RESPONSE_CODE_OK = 200
 
 
 class FrameType(IntEnum):
@@ -73,14 +74,13 @@ class GlobalConfig:
 
     This is be used to store the current configuration and calculate
     conversions from raw data.
-
     """
 
     def __init__(self):
         # IMU CONFIG
         self.accel_range: int = 16
         self.gyro_range: int = 2000
-        self.mag_range: int = 2500
+        self.mag_range: int = STANDARD_MAG_RANGE
         self.imu_sampling_rate: int = 240
         self.adc_sampling_rate: int = 240
         self.encoder_sampling_rate: int = 240
@@ -203,7 +203,7 @@ class GlobalConfig:
             Magnetic field in uT.
 
         """
-        if self.mag_range == 2500:
+        if self.mag_range == STANDARD_MAG_RANGE:
             return values * self._mag_ut_lsb
 
         raise ValueError("Invalid mag range")
@@ -229,7 +229,6 @@ class NextWheel:
     >>> print(nw.fetch())
 
     >>> nw.close()
-
     """
 
     def __init__(
@@ -271,7 +270,7 @@ class NextWheel:
         # Calibration constants
         self.file_download("Calibration.json")
         try:
-            with open("Calibration.json", "r", encoding="utf8") as json_file:
+            with open("Calibration.json", encoding="utf8") as json_file:
                 calibration = json.load(json_file)
             self.calibration_matrix = np.array(calibration["Matrix"])
             self.calibration_offset = np.array(calibration["Offset"])
@@ -319,7 +318,6 @@ class NextWheel:
 
         # Process the frame
         if frame_type == FrameType.CONFIG:
-
             # Config frame (should always be first)
             data = stream[offset : offset + data_size]
             offset += data_size
@@ -340,8 +338,9 @@ class NextWheel:
             self._config.imu_sampling_rate = imu_sampling_rate
             self._config.adc_sampling_rate = adc_sampling_rate
             self._config.encoder_sampling_rate = encoder_sampling_rate
+            return offset
 
-        elif frame_type == FrameType.ADC:  # frame type of the ADC values
+        if frame_type == FrameType.ADC:  # frame type of the ADC values
             data = stream[offset : offset + data_size]
             offset += data_size
 
@@ -351,8 +350,9 @@ class NextWheel:
 
             if len(self._adc_values) > self.max_analog_samples:
                 self._adc_values.pop(0)
+            return offset
 
-        elif frame_type == FrameType.IMU:  # frame type of the IMU
+        if frame_type == FrameType.IMU:  # frame type of the IMU
             data = stream[offset : offset + data_size]
             offset += data_size
 
@@ -375,8 +375,9 @@ class NextWheel:
 
             if len(self._imu_values) > self.max_imu_samples:
                 self._imu_values.pop(0)
+            return offset
 
-        elif frame_type == FrameType.POWER:  # frame type of the POWER
+        if frame_type == FrameType.POWER:  # frame type of the POWER
             data = stream[offset : offset + data_size]
             offset += data_size
 
@@ -386,8 +387,9 @@ class NextWheel:
 
             if len(self._power_values) > self.max_power_samples:
                 self._power_values.pop(0)
+            return offset
 
-        elif frame_type == FrameType.ENCODER:  # frame type of the ENCODER
+        if frame_type == FrameType.ENCODER:  # frame type of the ENCODER
             data = stream[offset : offset + data_size]
             offset += data_size
 
@@ -397,16 +399,14 @@ class NextWheel:
 
             if len(self._encoder_values) > self.max_encoder_samples:
                 self._encoder_values.pop(0)
+            return offset
 
-        elif frame_type == FrameType.SUPERFRAME:
-
+        if frame_type == FrameType.SUPERFRAME:
             for _ in range(data_size):  # data_size = number of frames
                 offset = self._parse_message(stream, offset)
+            return offset
 
-        else:
-            raise ValueError(f"Received an unknown frame type: {frame_type}")
-
-        return offset
+        raise ValueError(f"Received an unknown frame type: {frame_type}")
 
     def _on_message(self, ws: websocket.WebSocketApp, message: bytes) -> None:
         """
@@ -514,7 +514,6 @@ class NextWheel:
         This function shows the current sensor states in a simple GUI
         for testing and monitoring. To log data, use NextWheel.fetch()
         instead.
-
         """
         # Don't import until needed.
         import nextwheel.monitor as nwm  # noqa
@@ -528,7 +527,6 @@ class NextWheel:
         Blocking function that monitors using Matplotlib.
 
         Under development.
-
         """
         import matplotlib as mpl  # noqa
         from cycler import cycler  # noqa
@@ -633,7 +631,7 @@ class NextWheel:
             except ValueError:
                 pass
 
-        anim = animation.FuncAnimation(
+        animation.FuncAnimation(
             fig,
             on_timer,  # type: ignore
             interval=33,
@@ -816,7 +814,8 @@ class NextWheel:
         imu_sampling_rate
             Sampling rate for the IMU, in Hz. Valid values are 60, 120, 240.
         encoder_sampling_rate
-            Sampling rate for the encoder, in Hz. Valid values are 60, 120, 240.
+            Sampling rate for the encoder, in Hz. Valid values are 60, 120,
+            240.
         accelerometer_precision
             Accelerometer range, in g. Value values are 2, 4, 8, 16.
         gyrometer_precision
@@ -908,7 +907,7 @@ class NextWheel:
         ----------
         filename
             The name of the file to download
-        save_folder
+        save_path
             Optional. Where to save the file. The default is the current
             folder.
 
@@ -922,7 +921,7 @@ class NextWheel:
         response = requests.get(
             f"http://{self.ip}/file_download", params=param, stream=True
         )
-        if response.status_code == 200:
+        if response.status_code == HTTP_RESPONSE_CODE_OK:
             with open(os.path.join(save_path, filename), "wb") as f:
                 f.write(response.content)
                 # Return size...

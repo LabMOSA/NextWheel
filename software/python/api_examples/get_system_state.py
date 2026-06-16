@@ -1,6 +1,5 @@
-from nextwheel import NextWheel
-from datetime import datetime
 
+from nextwheel import NextWheel
 
 if __name__ == "__main__":
     # websocket.enableTrace(True)  # Uncomment to print all received data
@@ -10,6 +9,9 @@ if __name__ == "__main__":
     # Get system state
     ret = nw.get_system_state()
     if ret.status_code == 200:
-        print(f'get_system_state returned code: {ret.status_code} json:', ret.json())
+        print(
+            f"get_system_state returned code: {ret.status_code} json:",
+            ret.json(),
+        )
 
     # nw.close()

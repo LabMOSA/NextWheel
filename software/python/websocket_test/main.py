@@ -1,8 +1,10 @@
+from datetime import datetime
+
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
+
 from nextwheel import NextWheel
-from datetime import datetime
 
 power_values = []
 voltage_values = []
@@ -57,12 +59,12 @@ def update_plots(i):
     imu_plot.cla()
     imu_plot.set_title("IMU")
     imu_plot.plot(
-        #data["IMU"]["Time"],
-        #data["IMU"]["Acc"],
+        # data["IMU"]["Time"],
+        # data["IMU"]["Acc"],
         data["IMU"]["Time"],
         data["IMU"]["Gyro"],
-        #data["IMU"]["Time"],
-        #data["IMU"]["Mag"],
+        # data["IMU"]["Time"],
+        # data["IMU"]["Mag"],
     )
     axes = imu_plot.axis()
     imu_plot.axis([axes[0], axes[1], -1000, 1000])
