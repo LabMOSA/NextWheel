@@ -87,9 +87,6 @@ class GlobalConfig:
 
         # ADC CONFIG
         self.adc_rate = 240
-        self.has_calibration_matrix = False
-        self.calibration_matrix: np.ndarray = np.eye(6)
-        self.calibration_offset: np.ndarray = np.zeros(6)
 
         # ENCODER CONFIG
         self.encoder_rate = 240
@@ -238,15 +235,18 @@ class NextWheel:
         debug: bool = False,
     ):
         # General configuration
-        self._ip = ip
         self.max_imu_samples = 0
         self.max_analog_samples = 0
         self.max_encoder_samples = 0
         self.max_power_samples = 0
         self._config = GlobalConfig()
         self._debug = debug
+        self.has_calibration_matrix = False
+        self.calibration_matrix: np.ndarray = np.eye(6)
+        self.calibration_offset: np.ndarray = np.zeros(6)
 
         # Communication stuff
+        self.ip = ip
         self.ws: None | websocket.WebSocketApp = None
         self._mutex = threading.Lock()
         self._thread_is_running = False
@@ -268,9 +268,9 @@ class NextWheel:
         self._ip = value
         self.set_time(get_current_time())
         # Calibration constants
-        self.file_download("Calibration.json")
+        self.file_download("calibration.json")
         try:
-            with open("Calibration.json", encoding="utf8") as json_file:
+            with open("calibration.json", encoding="utf8") as json_file:
                 calibration = json.load(json_file)
             self.calibration_matrix = np.array(calibration["Matrix"])
             self.calibration_offset = np.array(calibration["Offset"])

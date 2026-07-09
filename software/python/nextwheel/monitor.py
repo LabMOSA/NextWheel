@@ -73,7 +73,7 @@ def monitor(nw):
     moment = None
 
     while parent_conn.recv() != "quit":
-        text = f"IP Address: {nw.IP}\n"
+        text = f"IP Address: {nw.ip}\n"
 
         # Get data
         ts = nw.fetch(clear=True)
