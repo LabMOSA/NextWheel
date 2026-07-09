@@ -1,3 +1,5 @@
+"""Setup for package generation."""
+
 import setuptools
 
 with open("README.md") as fh:

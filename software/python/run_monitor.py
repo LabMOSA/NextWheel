@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+"""Connect to a wheel and run the monitor from command line."""
 
 import sys
 

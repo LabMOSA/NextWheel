@@ -78,12 +78,12 @@ class GlobalConfig:
 
     def __init__(self):
         # IMU CONFIG
-        self.accel_range: int = 16
-        self.gyro_range: int = 2000
-        self.mag_range: int = STANDARD_MAG_RANGE
-        self.imu_sampling_rate: int = 240
-        self.adc_sampling_rate: int = 240
-        self.encoder_sampling_rate: int = 240
+        self.accel_range = 16
+        self.gyro_range = 2000
+        self.mag_range = STANDARD_MAG_RANGE
+        self.imu_sampling_rate = 240
+        self.adc_sampling_rate = 240
+        self.encoder_sampling_rate = 240
 
         # ADC CONFIG
         self.adc_rate = 240
@@ -281,7 +281,7 @@ class NextWheel:
             self.has_calibration_matrix = False
             print("No Calibration File Detected")
 
-    def _parse_message(self, stream: bytes, offset: int = 0) -> int:
+    def _parse_message(self, stream: bytes, offset: int = 0) -> int:  # noqa PLR0911 Too many return statements (7 > 6)
         """
         Parse a series of bytes corresponding to a messages.
 
@@ -522,7 +522,7 @@ class NextWheel:
         nwm.monitor(self)
         self.stop_streaming()
 
-    def graphical_monitor(self) -> None:
+    def graphical_monitor(self) -> None:  # noqa because under development
         """
         Blocking function that monitors using Matplotlib.
 

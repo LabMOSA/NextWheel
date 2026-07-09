@@ -51,7 +51,7 @@ def _gui_app(conn, cwd: str):
     root.mainloop()
 
 
-def monitor(nw):
+def monitor(nw):  # noqa PLR0912 PLR0915 Too many branches, too many statements
     """
     Implement NextWheel.monitor().
 
