@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-#
 # Copyright 2023 NextWheel Developers
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,15 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-This Python module provides the GUI for the NextWheel.monitor method.
-"""
+"""Provide the GUI for the NextWheel.monitor method."""
 
 import multiprocessing as mp
-import tkinter as tk
 import os
-import json
-import nextwheel
+import tkinter as tk
 
 
 def _gui_app(conn, cwd: str):
@@ -57,10 +51,12 @@ def _gui_app(conn, cwd: str):
     root.mainloop()
 
 
-def monitor(nw):
-    """Implement NextWheel.monitor(). nw is the class instance."""
-    data = nw.fetch()  # Non-updated data: show the last data.
+def monitor(nw):  # noqa PLR0912 PLR0915 Too many branches, too many statements
+    """
+    Implement NextWheel.monitor().
 
+    nw is the class instance.
+    """
     parent_conn, child_conn = mp.Pipe()
     p = mp.Process(target=_gui_app, args=(child_conn, os.getcwd()))
     p.start()
@@ -75,30 +71,9 @@ def monitor(nw):
     channels = None
     force = None
     moment = None
-    current_state = None
 
-    i_refresh_state = 65535  # Current system state. Start with a refresh.
     while parent_conn.recv() != "quit":
-        text = f"IP Address: {nw.IP}\n"
-
-        # # Get current state
-        # i_refresh_state += 1
-        # if i_refresh_state > 10:
-        #     current_state = nw.get_system_state()
-        #     i_refresh_state = 0
-
-        # if current_state is not None:
-        #     text += "\nCurrent State\n"
-
-        #     if current_state["streaming"] == 0:
-        #         text += "    Not streaming\n"
-        #     else:
-        #         text += "    Streaming\n"
-
-        #     if current_state["recording"] == 0:
-        #         text += "    Not recording\n"
-        #     else:
-        #         text += f"    Recording to {current_state['filename']}\n"
+        text = f"IP Address: {nw.ip}\n"
 
         # Get data
         ts = nw.fetch(clear=True)
@@ -153,7 +128,7 @@ def monitor(nw):
             text += (
                 "\nPower\n"
                 f"    Voltage: {voltage:.3f} V\n"
-                f"    Current: {1000*current:.0f} mA\n"
+                f"    Current: {1000 * current:.0f} mA\n"
             )
 
         if acc is not None:
@@ -181,14 +156,14 @@ def monitor(nw):
             )
 
         if encoder is not None:
-            text += "\nEncoder (ticks)\n" f"    {encoder:.2f}\n"
+            text += f"\nEncoder (ticks)\n    {encoder:.2f}\n"
 
         if channels is not None:
             text += (
                 f"\nADC Channels ({ts['Analog'].info['Channels']['Unit']})\n"
             )
             for i in range(6):
-                text += f"    channel {i+1}: {channels[i]:.0f}\n"
+                text += f"    channel {i + 1}: {channels[i]:.0f}\n"
 
         if force is not None:
             text += f"\nForce ({ts['Analog'].info['Force']['Unit']})\n"

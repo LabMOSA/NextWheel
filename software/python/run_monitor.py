@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
+"""Connect to a wheel and run the monitor from command line."""
+
+import sys
 
 import nextwheel
-import sys
-import time
 
 if __name__ == "__main__":
     ip = sys.argv[-1]

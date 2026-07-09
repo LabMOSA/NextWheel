@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-#
 # Copyright 2023 NextWheel Developers
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,35 +12,36 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-This Python module provides the NextWheel class that fetches data from an
-intrumented wheel.
-"""
+"""Provides the NextWheel class that fetches data from an intrumented wheel."""
 
-import websocket
+import json
+import os
 import struct
 import threading
-import numpy as np
 from enum import IntEnum
+from time import time as get_current_time
 from typing import Any
+
+import numpy as np
 import requests
-import os
-import json
-import time
+import websocket
 
 try:
     from kineticstoolkit import TimeSeries
 except ModuleNotFoundError:
 
-    class TimeSeries:
+    class TimeSeries:  # type: ignore
+        """Object similar to the Kinetics Toolkit TimeSeries class."""
+
         def __init__(
             self,
-            time=[],
-            data: dict[str, np.array] = {},
-            info: dict[str, dict[str, Any]] = {},
+            time: list[float] | np.ndarray | None = None,
+            data: dict[str, np.ndarray] | None = None,
+            info: dict[str, dict[str, Any]] | None = None,
         ):
-            self.time = time
-            self.data = data
+            self.time = time if time is not None else []
+            self.data = data if data is not None else {}
+            self.info = info if info is not None else {}
 
         def __str__(self):
             return "Object with attributes time and data"
@@ -54,6 +53,8 @@ except ModuleNotFoundError:
 # Constants
 
 GRAVITY = 9.80665
+STANDARD_MAG_RANGE = 2500
+HTTP_RESPONSE_CODE_OK = 200
 
 
 class FrameType(IntEnum):
@@ -73,19 +74,19 @@ class GlobalConfig:
 
     This is be used to store the current configuration and calculate
     conversions from raw data.
-
     """
 
     def __init__(self):
         # IMU CONFIG
         self.accel_range = 16
         self.gyro_range = 2000
-        self.mag_range = 2500
-        self.imu_rate = 240
+        self.mag_range = STANDARD_MAG_RANGE
+        self.imu_sampling_rate = 240
+        self.adc_sampling_rate = 240
+        self.encoder_sampling_rate = 240
 
         # ADC CONFIG
         self.adc_rate = 240
-        self.has_calibration_matrix = False
 
         # ENCODER CONFIG
         self.encoder_rate = 240
@@ -153,8 +154,8 @@ class GlobalConfig:
 
         try:
             return values * factor[self.accel_range]
-        except KeyError:
-            raise ValueError("Invalid accel range")
+        except KeyError as exc:
+            raise ValueError("Invalid accel range") from exc
 
     def convert_gyro_int_to_deg_s(self, values: np.ndarray) -> np.ndarray:
         """
@@ -181,12 +182,12 @@ class GlobalConfig:
 
         try:
             return values * factor[self.gyro_range]
-        except KeyError:
-            raise ValueError("Invalid gyro range")
+        except KeyError as exc:
+            raise ValueError("Invalid gyro range") from exc
 
     def convert_mag_values(self, values: np.ndarray) -> np.ndarray:
         """
-        Convert magnetometer integers to ??.
+        Convert magnetometer integers to uT.
 
         Parameters
         ----------
@@ -196,14 +197,13 @@ class GlobalConfig:
         Returns
         -------
         np.ndarray
-            To be determined.
+            Magnetic field in uT.
 
         """
-        # FIXME what is the output unit?
-        if self.mag_range == 2500:
+        if self.mag_range == STANDARD_MAG_RANGE:
             return values * self._mag_ut_lsb
-        else:
-            raise ValueError("Invalid mag range")
+
+        raise ValueError("Invalid mag range")
 
 
 class NextWheel:
@@ -222,32 +222,32 @@ class NextWheel:
     -------
     >>> from nextwheel import NextWheel
     >>> nw = NextWheel("196.168.1.254")
-    >>> nw.connect()
 
     >>> print(nw.fetch())
 
     >>> nw.close()
-
     """
 
     def __init__(
         self,
-        IP: str = "",
+        ip: str = "",
         *,
         debug: bool = False,
     ):
         # General configuration
-        self._IP = IP
-        self.HEADER_LENGTH = 10
         self.max_imu_samples = 0
         self.max_analog_samples = 0
         self.max_encoder_samples = 0
         self.max_power_samples = 0
         self._config = GlobalConfig()
         self._debug = debug
+        self.has_calibration_matrix = False
+        self.calibration_matrix: np.ndarray = np.eye(6)
+        self.calibration_offset: np.ndarray = np.zeros(6)
 
         # Communication stuff
-        self.ws = None
+        self.ip = ip
+        self.ws: None | websocket.WebSocketApp = None
         self._mutex = threading.Lock()
         self._thread_is_running = False
 
@@ -258,28 +258,30 @@ class NextWheel:
         self._encoder_values = []  # type: list[np.ndarray]
 
     @property
-    def IP(self):
-        return self._IP
+    def ip(self):
+        """Getter for ip property."""
+        return self._ip
 
-    @IP.setter
-    def IP(self, value):
-        self._IP = value
-        self.set_time(time.time())
+    @ip.setter
+    def ip(self, value):
+        """Setter for ip property."""
+        self._ip = value
+        self.set_time(get_current_time())
         # Calibration constants
-        self.file_download("Calibration.json")
+        self.file_download("calibration.json")
         try:
-            with open("Calibration.json", "r") as json_file:
-                self.CALIBRATION = json.load(json_file)
-            self.CALIBRATION_MATRIX = np.array(self.CALIBRATION["Matrix"])
-            self.CALIBRATION_OFFSET = np.array(self.CALIBRATION["Offset"])
+            with open("calibration.json", encoding="utf8") as json_file:
+                calibration = json.load(json_file)
+            self.calibration_matrix = np.array(calibration["Matrix"])
+            self.calibration_offset = np.array(calibration["Offset"])
             self.has_calibration_matrix = True
         except FileNotFoundError:
-            self.CALIBRATION_MATRIX = np.identity(6)
-            self.CALIBRATION_OFFSET = np.zeros((6,))
+            self.calibration_matrix = np.identity(6)
+            self.calibration_offset = np.zeros((6,))
             self.has_calibration_matrix = False
             print("No Calibration File Detected")
 
-    def _parse_message(self, stream: bytes, offset: int = 0) -> int:
+    def _parse_message(self, stream: bytes, offset: int = 0) -> int:  # noqa PLR0911 Too many return statements (7 > 6)
         """
         Parse a series of bytes corresponding to a messages.
 
@@ -300,10 +302,9 @@ class NextWheel:
         offset
             The position of the next message in the stream.
 
-
         """
-        if type(stream) is not bytes:
-            return
+        if not isinstance(stream, bytes):
+            raise ValueError("stream must be bytes.")
 
         if offset >= len(stream):
             return offset
@@ -317,7 +318,6 @@ class NextWheel:
 
         # Process the frame
         if frame_type == FrameType.CONFIG:
-
             # Config frame (should always be first)
             data = stream[offset : offset + data_size]
             offset += data_size
@@ -338,8 +338,9 @@ class NextWheel:
             self._config.imu_sampling_rate = imu_sampling_rate
             self._config.adc_sampling_rate = adc_sampling_rate
             self._config.encoder_sampling_rate = encoder_sampling_rate
+            return offset
 
-        elif frame_type == FrameType.ADC:  # frame type of the ADC values
+        if frame_type == FrameType.ADC:  # frame type of the ADC values
             data = stream[offset : offset + data_size]
             offset += data_size
 
@@ -349,8 +350,9 @@ class NextWheel:
 
             if len(self._adc_values) > self.max_analog_samples:
                 self._adc_values.pop(0)
+            return offset
 
-        elif frame_type == FrameType.IMU:  # frame type of the IMU
+        if frame_type == FrameType.IMU:  # frame type of the IMU
             data = stream[offset : offset + data_size]
             offset += data_size
 
@@ -373,8 +375,9 @@ class NextWheel:
 
             if len(self._imu_values) > self.max_imu_samples:
                 self._imu_values.pop(0)
+            return offset
 
-        elif frame_type == FrameType.POWER:  # frame type of the POWER
+        if frame_type == FrameType.POWER:  # frame type of the POWER
             data = stream[offset : offset + data_size]
             offset += data_size
 
@@ -384,8 +387,9 @@ class NextWheel:
 
             if len(self._power_values) > self.max_power_samples:
                 self._power_values.pop(0)
+            return offset
 
-        elif frame_type == FrameType.ENCODER:  # frame type of the ENCODER
+        if frame_type == FrameType.ENCODER:  # frame type of the ENCODER
             data = stream[offset : offset + data_size]
             offset += data_size
 
@@ -395,18 +399,16 @@ class NextWheel:
 
             if len(self._encoder_values) > self.max_encoder_samples:
                 self._encoder_values.pop(0)
+            return offset
 
-        elif frame_type == FrameType.SUPERFRAME:
-
-            for sub_count in range(data_size):  # data_size = number of frames
+        if frame_type == FrameType.SUPERFRAME:
+            for _ in range(data_size):  # data_size = number of frames
                 offset = self._parse_message(stream, offset)
+            return offset
 
-        else:
-            raise ValueError(f"Received an unknown frame type: {frame_type}")
+        raise ValueError(f"Received an unknown frame type: {frame_type}")
 
-        return offset
-
-    def _on_message(self, ws, message):
+    def _on_message(self, ws: websocket.WebSocketApp, message: bytes) -> None:
         """
         React to WebSocketApp message received.
 
@@ -414,34 +416,31 @@ class NextWheel:
 
         Parameters
         ----------
-        ws : _app.WebSocketApp
-            DESCRIPTION.
-        message : bytes
+        ws
+            Unused.
+        message
             Information containing data in bytes.
 
-        Returns
-        -------
-        None.
-
         """
-        self._mutex.acquire()
-        self._parse_message(message)
-        self._mutex.release()
+        if self._debug:
+            print("Received data: ", ws)
+        with self._mutex:
+            self._parse_message(message)
 
     def _on_open(self, ws):
         """Reaction of the WebSocketApp when the connection is open."""
         if self._debug:
-            print("Connected: ", self.ws)
+            print("Connected: ", ws)
 
     def _on_error(self, ws, error):
         """Reaction of the WebSocketApp when there is an error."""
-        print(self.ws, error)
+        print(ws, error)
         self.stop_streaming()
 
     def _on_close(self, ws, close_status_code, close_msg):
         """Reaction of the WebSocketApp when the connection is close."""
         if self._debug:
-            print("Closed: ", self.ws, close_status_code, close_msg)
+            print("Closed: ", ws, close_status_code, close_msg)
 
     def start_streaming(
         self,
@@ -478,7 +477,7 @@ class NextWheel:
         self.max_power_samples = max_power_samples
 
         self.ws = websocket.WebSocketApp(
-            f"ws://{self.IP}:81/",
+            f"ws://{self.ip}:81/",
             on_open=self._on_open,
             on_message=self._on_message,
             on_error=self._on_error,
@@ -512,9 +511,9 @@ class NextWheel:
         """
         Blocking function that monitors the sensors measurements.
 
-        This function shows the current sensor states in a simple GUI for
-        testing and monitoring. To log data, use NextWheel.fetch() instead.
-
+        This function shows the current sensor states in a simple GUI
+        for testing and monitoring. To log data, use NextWheel.fetch()
+        instead.
         """
         # Don't import until needed.
         import nextwheel.monitor as nwm  # noqa
@@ -523,14 +522,14 @@ class NextWheel:
         nwm.monitor(self)
         self.stop_streaming()
 
-    def graphical_monitor(self) -> None:
+    def graphical_monitor(self) -> None:  # noqa because under development
         """
         Blocking function that monitors using Matplotlib.
 
         Under development.
-
         """
         import matplotlib as mpl  # noqa
+        from cycler import cycler  # noqa
         import matplotlib.pyplot as plt  # noqa
         from matplotlib import animation  # noqa
 
@@ -543,7 +542,7 @@ class NextWheel:
         plt.pause(0.5)
 
         # Matplotlib defaults
-        mpl.rcParams["axes.prop_cycle"] = mpl.cycler(
+        mpl.rcParams["axes.prop_cycle"] = cycler(
             color=["r", "g", "b", "c", "m", "y", "k", "tab:orange"]
         )
         mpl.rcParams["figure.figsize"] = [10, 5]
@@ -632,7 +631,7 @@ class NextWheel:
             except ValueError:
                 pass
 
-        anim = animation.FuncAnimation(
+        animation.FuncAnimation(
             fig,
             on_timer,  # type: ignore
             interval=33,
@@ -689,6 +688,7 @@ class NextWheel:
         -------
         data : dict[str, TimeSeries]
             A dictionary of multiple TimeSeries described above.
+
         """
         self._mutex.acquire()
 
@@ -718,8 +718,8 @@ class NextWheel:
 
         if len(adc_values) > 0 and self.has_calibration_matrix:
             calibrated_adc_values = (
-                np.dot(self.CALIBRATION_MATRIX, adc_values[:, 1:7].T).T
-                - self.CALIBRATION_OFFSET
+                np.dot(self.calibration_matrix, adc_values[:, 1:7].T).T
+                - self.calibration_offset
             )
         else:
             calibrated_adc_values = adc_values
@@ -777,7 +777,7 @@ class NextWheel:
         )
         return data
 
-    def set_time(self, unix_time: int) -> dict:
+    def set_time(self, unix_time: int) -> None:
         """
         Set the time of the instrumented wheel.
 
@@ -792,7 +792,7 @@ class NextWheel:
 
         """
         requests.post(
-            f"http://{self.IP}/config_set_time", params={"time": unix_time}
+            f"http://{self.ip}/config_set_time", params={"time": unix_time}
         )
 
     def set_sensors_params(
@@ -814,7 +814,8 @@ class NextWheel:
         imu_sampling_rate
             Sampling rate for the IMU, in Hz. Valid values are 60, 120, 240.
         encoder_sampling_rate
-            Sampling rate for the encoder, in Hz. Valid values are 60, 120, 240.
+            Sampling rate for the encoder, in Hz. Valid values are 60, 120,
+            240.
         accelerometer_precision
             Accelerometer range, in g. Value values are 2, 4, 8, 16.
         gyrometer_precision
@@ -826,10 +827,8 @@ class NextWheel:
         requests.Response
 
         """
-        # TODO Validate params? We assume it is verified in the ESP32 firmware
-
         response = requests.post(
-            f"http://{self.IP}/config_update",
+            f"http://{self.ip}/config_update",
             params={
                 "adc_sampling_rate": adc_sampling_rate,
                 "imu_sampling_rate": imu_sampling_rate,
@@ -850,7 +849,7 @@ class NextWheel:
             A dictionary in the form parameter:value.
 
         """
-        response = requests.get(f"http://{self.IP}/config")
+        response = requests.get(f"http://{self.ip}/config")
         return json.loads(response.content)
 
     def get_system_state(self) -> dict:
@@ -863,10 +862,10 @@ class NextWheel:
             A dictionary in the form parameter:value
 
         """
-        response = requests.get(f"http://{self.IP}/system_state")
+        response = requests.get(f"http://{self.ip}/system_state")
         return json.loads(response.content)
 
-    def start_recording(self) -> dict:
+    def start_recording(self) -> None:
         """
         Start recording data on the instrumented wheel.
 
@@ -875,9 +874,9 @@ class NextWheel:
         None
 
         """
-        requests.get(f"http://{self.IP}/start_recording")
+        requests.get(f"http://{self.ip}/start_recording")
 
-    def stop_recording(self) -> dict:
+    def stop_recording(self) -> None:
         """
         Stop recording data on the instrumented wheel.
 
@@ -886,7 +885,7 @@ class NextWheel:
         None
 
         """
-        requests.get(f"http://{self.IP}/stop_recording")
+        requests.get(f"http://{self.ip}/stop_recording")
 
     def file_list(self) -> dict:
         """
@@ -897,7 +896,7 @@ class NextWheel:
         dict
 
         """
-        response = requests.get(f"http://{self.IP}/file_list")
+        response = requests.get(f"http://{self.ip}/file_list")
         return json.loads(response.content)
 
     def file_download(self, filename: str, save_path: str = ".") -> int:
@@ -908,7 +907,7 @@ class NextWheel:
         ----------
         filename
             The name of the file to download
-        save_folder
+        save_path
             Optional. Where to save the file. The default is the current
             folder.
 
@@ -920,9 +919,9 @@ class NextWheel:
         """
         param = {"file": filename}
         response = requests.get(
-            f"http://{self.IP}/file_download", params=param, stream=True
+            f"http://{self.ip}/file_download", params=param, stream=True
         )
-        if response.status_code == 200:
+        if response.status_code == HTTP_RESPONSE_CODE_OK:
             with open(os.path.join(save_path, filename), "wb") as f:
                 f.write(response.content)
                 # Return size...
@@ -931,7 +930,7 @@ class NextWheel:
         # filed download
         return 0
 
-    def file_delete(self, filename: str) -> dict:
+    def file_delete(self, filename: str) -> None:
         """
         Delete a file from the instrumented wheel.
 
@@ -946,7 +945,7 @@ class NextWheel:
 
         """
         requests.get(
-            f"http://{self.IP}/file_delete", params={"file": filename}
+            f"http://{self.ip}/file_delete", params={"file": filename}
         )
 
 
@@ -967,10 +966,10 @@ def read_dat(filename) -> dict:
     """
     # Create a dummy wheel to parse the data
     nw = NextWheel()
-    nw.max_analog_samples = np.inf
-    nw.max_encoder_samples = np.inf
-    nw.max_imu_samples = np.inf
-    nw.max_power_samples = np.inf
+    nw.max_analog_samples = int(1e15)
+    nw.max_encoder_samples = int(1e15)
+    nw.max_imu_samples = int(1e15)
+    nw.max_power_samples = int(1e15)
 
     offset = 0
     with open(filename, "rb") as fid:
