@@ -3,13 +3,13 @@
 To install the Python module:
 
 ```
-pip install git+https://github.com/felixchenier/NextWheel.git#subdirectory=python
+pip install git+https://github.com/felixchenier/NextWheel.git#subdirectory=software/python
 ```
 
 To upgrade the Python module:
 
 ```
-pip install --upgrade git+https://github.com/felixchenier/NextWheel.git#subdirectory=python
+pip install --upgrade git+https://github.com/felixchenier/NextWheel.git#subdirectory=software/python
 ```
 
 To use the module:
