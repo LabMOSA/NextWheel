@@ -5,7 +5,7 @@ import setuptools
 with open("README.md") as fh:
     long_description = fh.read()
 
-version = "0.1.4a"
+version = "0.1.5"
 
 setuptools.setup(
     name="nextwheel",

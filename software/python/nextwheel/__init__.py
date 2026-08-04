@@ -266,6 +266,9 @@ class NextWheel:
     def ip(self, value):
         """Setter for ip property."""
         self._ip = value
+        if value == "":
+        	return
+        
         self.set_time(get_current_time())
         # Calibration constants
         self.file_download("calibration.json")
