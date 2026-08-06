@@ -1,0 +1,51 @@
+name: run_tests
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "**" ]
+  schedule:
+     - cron: "15 0 1,6,11,16,21,26 * *"
+  workflow_dispatch:
+  
+jobs:
+  unittests:
+    defaults:
+      run:
+        shell: bash -l {0}
+
+    runs-on: ubuntu-latest
+        
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        submodules: recursive
+    - id: install-python
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.x"
+        cache: "pip"
+    - name: Install dependencies
+      run: |
+        cd software/python
+        pip install -r requirements.txt
+        pip install -r requirements_dev.txt
+    - name: Test formatting
+      run: |
+        cd software/python
+        ruff format --check nextwheel
+    - name: Test code quality
+      run: |
+        cd software/python
+        ruff check --output-format=github nextwheel
+    - name: Test static typing
+      run:  |
+        cd software/python
+        mypy src
+    - name: Test with pytest and crash on warnings
+      run: |
+        cd software/python
+        export PYTHONPATH=":nextwheel"
+        echo "Running tests with PYTHONPATH=$PYTHONPATH"
+        pytest tests -W error::RuntimeWarning
