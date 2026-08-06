@@ -267,13 +267,17 @@ class NextWheel:
         """Setter for ip property."""
         self._ip = value
         if value == "":
-        	return
-        
+            return
+
         self.set_time(get_current_time())
         # Calibration constants
         self.file_download("calibration.json")
+        self._load_calibration("calibration.json")
+
+    def _load_calibration(self, filename="calibration.json"):
+        """Load calibration file if the file is found."""
         try:
-            with open("calibration.json", encoding="utf8") as json_file:
+            with open(filename, encoding="utf8") as json_file:
                 calibration = json.load(json_file)
             self.calibration_matrix = np.array(calibration["Matrix"])
             self.calibration_offset = np.array(calibration["Offset"])
@@ -952,7 +956,7 @@ class NextWheel:
         )
 
 
-def read_dat(filename) -> dict:
+def read_dat(filename: str, calibration_file: str | None = None) -> dict:
     """
     Read a dat file downloaded from the instrumented wheel.
 
@@ -960,6 +964,10 @@ def read_dat(filename) -> dict:
     ----------
     filename
         The name of the local file to read.
+    calibration_file
+        Optional. The calibration.json file, as found on the wheel and
+        downloaded using NextWheel.file_download("calibration.json"). If not
+        provided, forces and moments are not reconstructed from channel values.
 
     Returns
     -------
@@ -969,6 +977,8 @@ def read_dat(filename) -> dict:
     """
     # Create a dummy wheel to parse the data
     nw = NextWheel()
+    if calibration_file is not None:
+        nw._load_calibration(calibration_file)
     nw.max_analog_samples = int(1e15)
     nw.max_encoder_samples = int(1e15)
     nw.max_imu_samples = int(1e15)
