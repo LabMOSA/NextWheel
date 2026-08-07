@@ -42,7 +42,7 @@ jobs:
     - name: Test static typing
       run:  |
         cd software/python
-        mypy src
+        mypy nextwheel
     - name: Test with pytest and crash on warnings
       run: |
         cd software/python
