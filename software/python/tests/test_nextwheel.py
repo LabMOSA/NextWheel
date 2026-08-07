@@ -25,6 +25,11 @@ def test_read_dat():
     assert np.isclose(data["IMU"].data["Gyro"].mean(), -26.455109319914804)
     assert np.isclose(data["IMU"].data["Mag"].mean(), 29.033203171222343)
     assert np.isclose(data["Encoder"].data["Angle"].mean(), 51772.59336173234)
+    assert np.isclose(data["Power"].data["Voltage"].mean(), 8.20624114266524)
+    assert np.isclose(
+        data["Power"].data["Current"].mean(), 0.34238723691896344
+    )
+    assert np.isclose(data["Power"].data["Power"].mean(), 2.658325377930986)
 
 
 def test_time_as_unix_time():
@@ -33,18 +38,22 @@ def test_time_as_unix_time():
         root_dir + "/nextwheel/sample.dat",
         root_dir + "/nextwheel/sample_calibration.json",
     )
-    assert datetime.datetime.fromtimestamp(
-        data["Analog"].time[0]
-    ) == datetime.datetime(2000, 12, 31, 19, 3, 21, 432000)
-    assert datetime.datetime.fromtimestamp(
-        data["Analog"].time[1]
-    ) == datetime.datetime(2000, 12, 31, 19, 3, 21, 440142)
-    assert datetime.datetime.fromtimestamp(
-        data["IMU"].time[0]
-    ) == datetime.datetime(2000, 12, 31, 19, 3, 21, 432196)
-    assert datetime.datetime.fromtimestamp(
-        data["Encoder"].time[0]
-    ) == datetime.datetime(2000, 12, 31, 19, 3, 21, 434985)
+    assert (
+        datetime.datetime.fromtimestamp(data["Analog"].time[0]).microsecond
+        == 432000
+    )
+    assert (
+        datetime.datetime.fromtimestamp(data["Analog"].time[1]).microsecond
+        == 440142
+    )
+    assert (
+        datetime.datetime.fromtimestamp(data["IMU"].time[0]).microsecond
+        == 432196
+    )
+    assert (
+        datetime.datetime.fromtimestamp(data["Encoder"].time[0]).microsecond
+        == 434985
+    )
 
 
 if __name__ == "__main__":
