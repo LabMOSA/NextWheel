@@ -27,7 +27,7 @@ import requests
 import websocket
 
 try:
-    from kineticstoolkit import TimeSeries
+    from kineticstoolkit import TimeSeries  # type: ignore
 except ModuleNotFoundError:
 
     class TimeSeries:  # type: ignore
