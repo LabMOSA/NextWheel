@@ -17,14 +17,19 @@ def test_read_dat():
         root_dir + "/nextwheel/sample_calibration.json",
     )
     # No regression test
-    assert np.isclose(data["Analog"].data["Force"].mean(), -1.9105986194916111)
     assert np.isclose(
-        data["Analog"].data["Moment"].mean(), 0.46255237817195616
+        data["Analog"].data["Forces"].mean(), -1.9105986194916111
+    )
+    assert np.isclose(
+        data["Analog"].data["Moments"].mean(), 0.46255237817195616
     )
     assert np.isclose(data["IMU"].data["Acc"].mean(), -2.9063238045895927)
     assert np.isclose(data["IMU"].data["Gyro"].mean(), -26.455109319914804)
     assert np.isclose(data["IMU"].data["Mag"].mean(), 29.033203171222343)
-    assert np.isclose(data["Encoder"].data["Angle"].mean(), 51772.59336173234)
+    assert np.isclose(
+        data["Encoder"].data["Angle"].mean(),
+        51772.59336173234 * 0.087890625 / 180 * np.pi,
+    )
     assert np.isclose(data["Power"].data["Voltage"].mean(), 8.20624114266524)
     assert np.isclose(
         data["Power"].data["Current"].mean(), 0.34238723691896344
