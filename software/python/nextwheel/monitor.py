@@ -114,12 +114,12 @@ def monitor(nw):  # noqa PLR0912 PLR0915 Too many branches, too many statements
             pass
 
         try:
-            force = ts["Analog"].data["Force"][-1]
+            force = ts["Analog"].data["Forces"][-1]
         except IndexError:
             pass
 
         try:
-            moment = ts["Analog"].data["Moment"][-1]
+            moment = ts["Analog"].data["Moments"][-1]
         except IndexError:
             pass
 
@@ -156,7 +156,7 @@ def monitor(nw):  # noqa PLR0912 PLR0915 Too many branches, too many statements
             )
 
         if encoder is not None:
-            text += f"\nEncoder (ticks)\n    {encoder:.2f}\n"
+            text += f"\nEncoder (rad)\n    {encoder:.2f}\n"
 
         if channels is not None:
             text += (
@@ -166,13 +166,13 @@ def monitor(nw):  # noqa PLR0912 PLR0915 Too many branches, too many statements
                 text += f"    channel {i + 1}: {channels[i]:.0f}\n"
 
         if force is not None:
-            text += f"\nForce ({ts['Analog'].info['Force']['Unit']})\n"
+            text += f"\nForce ({ts['Analog'].info['Forces']['Unit']})\n"
             text += f"    Fx: {force[0]:.2f}\n"
             text += f"    Fy: {force[1]:.2f}\n"
             text += f"    Fz: {force[2]:.2f}\n"
 
         if moment is not None:
-            text += f"\nMoment ({ts['Analog'].info['Moment']['Unit']})\n"
+            text += f"\nMoment ({ts['Analog'].info['Moments']['Unit']})\n"
             text += f"    Mx: {moment[0]:.2f}\n"
             text += f"    My: {moment[1]:.2f}\n"
             text += f"    Mz: {moment[2]:.2f}\n"

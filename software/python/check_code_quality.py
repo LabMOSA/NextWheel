@@ -27,7 +27,7 @@ def run_linter() -> None:  # pragma: no cover
     """Run code quality review (ruff)."""
     print("========================================")
     print("Code Quality Review (ruff)")
-    _run_and_print(["ruff", "check", "--fix", "."])
+    _run_and_print(["ruff", "check", "--fix", "nextwheel"])
 
 
 def run_static_type_checker() -> None:  # pragma: no cover

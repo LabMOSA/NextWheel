@@ -55,6 +55,7 @@ except ModuleNotFoundError:
 GRAVITY = 9.80665
 STANDARD_MAG_RANGE = 2500
 HTTP_RESPONSE_CODE_OK = 200
+ENCODER_RESOLUTION = 0.087890625 / 180 * np.pi  # rad per tick
 
 
 class FrameType(IntEnum):
@@ -204,6 +205,23 @@ class GlobalConfig:
             return values * self._mag_ut_lsb
 
         raise ValueError("Invalid mag range")
+
+    def convert_encoder_values(self, values: np.ndarray) -> np.ndarray:
+        """
+        Convert encoder ticks to radians.
+
+        Parameters
+        ----------
+        values
+            Integers as reported by the sensor.
+
+        Returns
+        -------
+        np.ndarray
+            Angle in radians.
+
+        """
+        return values * ENCODER_RESOLUTION
 
 
 class NextWheel:
@@ -401,7 +419,14 @@ class NextWheel:
             offset += data_size
 
             self._encoder_values.append(
-                np.hstack([[time], struct.unpack_from("<q", data)])
+                np.hstack(
+                    [
+                        [time],
+                        self._config.convert_encoder_values(
+                            np.array(struct.unpack_from("<q", data))
+                        ),
+                    ]
+                )
             )
 
             if len(self._encoder_values) > self.max_encoder_samples:
@@ -592,7 +617,7 @@ class NextWheel:
         encoder_line = encoder_plot.plot([])[0]
         encoder_plot.set_xlim(0, self.max_encoder_samples)
         encoder_plot.set_ylim(0, 4000)
-        encoder_plot.set_ylabel("Unit to be defined")
+        encoder_plot.set_ylabel("radians")
 
         plt.tight_layout()
 
@@ -660,9 +685,9 @@ class NextWheel:
             TimeSeries that corresponds to the ADC values, and that contains
             these data:
                 "Channels": Nx6 raw uncalibrated voltage values as integers.
-                "Force": Nx4 force in newtons in the form [Fx, Fy, Fz, 0.0].
-                "Moment": Nx4 moment in Nm in the form [Mx, My, Mz, 0.0].
-            Force and Moment are present only if a calibration matrix was
+                "Forces": Nx4 forces in newtons in the form [Fx, Fy, Fz, 0.0].
+                "Moments": Nx4 moments in Nm in the form [Mx, My, Mz, 0.0].
+            Forces and Moments are present only if a calibration matrix was
             found.
         - IMU:
             TimeSeries that corresponds to the Inertial Measurement Unit, and
@@ -676,7 +701,7 @@ class NextWheel:
         - Encoder:
             TimeSeries that corresponds to the angular encoder, and that
             contains this data:
-                "Angle": series of N angles (currently non calibrated).
+                "Angle": series of N angles in radians.
         - Power:
             TimeSeries that corresponds to the electric power meter, and that
             contains these data:
@@ -736,20 +761,20 @@ class NextWheel:
         data["Analog"].data["Channels"] = adc_values[:, 1:8]
         data["Analog"].info["Channels"] = {"Unit": "raw"}
         if self.has_calibration_matrix:
-            data["Analog"].data["Force"] = np.zeros(
+            data["Analog"].data["Forces"] = np.zeros(
                 (calibrated_adc_values.shape[0], 4)
             )
-            data["Analog"].data["Force"][:, 0:3] = calibrated_adc_values[
+            data["Analog"].data["Forces"][:, 0:3] = calibrated_adc_values[
                 :, 0:3
             ]
-            data["Analog"].info["Force"] = {"Unit": "N"}
-            data["Analog"].data["Moment"] = np.zeros(
+            data["Analog"].info["Forces"] = {"Unit": "N"}
+            data["Analog"].data["Moments"] = np.zeros(
                 (calibrated_adc_values.shape[0], 4)
             )
-            data["Analog"].data["Moment"][:, 0:3] = calibrated_adc_values[
+            data["Analog"].data["Moments"][:, 0:3] = calibrated_adc_values[
                 :, 3:6
             ]
-            data["Analog"].info["Moment"] = {"Unit": "Nm"}
+            data["Analog"].info["Moments"] = {"Unit": "Nm"}
 
         data["IMU"] = TimeSeries(
             time=imu_values[:, 0],
@@ -767,7 +792,7 @@ class NextWheel:
         data["Encoder"] = TimeSeries(
             time=encoder_values[:, 0],
             data={"Angle": encoder_values[:, 1]},
-            info={"Angle": {"Unit": "uncalibrated"}},
+            info={"Angle": {"Unit": "radians"}},
         )
         data["Power"] = TimeSeries(
             time=power_values[:, 0],
