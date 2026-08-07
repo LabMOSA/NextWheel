@@ -2,7 +2,7 @@ name: run_tests
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "master" ]
   pull_request:
     branches: [ "**" ]
   schedule:
