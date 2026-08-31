@@ -5,7 +5,7 @@ import setuptools
 with open("README.md") as fh:
     long_description = fh.read()
 
-version = "0.1.7"
+version = "0.1.8"
 
 setuptools.setup(
     name="nextwheel",
@@ -27,9 +27,7 @@ setuptools.setup(
         "Source": "https://github.com/felixchenier/NextWheel",
         "Tracker": "https://github.com/felixchenier/NextWheel/issues",
     },
-    install_requires=[
-        "numpy", "websocket-client", "matplotlib", "requests"
-    ],
+    install_requires=["numpy", "websocket-client", "matplotlib", "requests"],
     classifiers=[
         "Development Status :: 2 - Pre-Alpha",
         "Intended Audience :: Science/Research",

@@ -25,6 +25,7 @@ from typing import Any
 import numpy as np
 import requests
 import websocket
+from requests.exceptions import ConnectTimeout
 
 try:
     from kineticstoolkit import TimeSeries  # type: ignore
@@ -236,6 +237,12 @@ class NextWheel:
         - NextWheel.close() close the connection with the instrumented wheel.
     It needs an IP address like in the example below.
 
+    Raises
+    ------
+    TimeoutError
+        When ip.setter cannot connect to the wheel.
+
+
     Exemple
     -------
     >>> from nextwheel import NextWheel
@@ -244,6 +251,7 @@ class NextWheel:
     >>> print(nw.fetch())
 
     >>> nw.close()
+
     """
 
     def __init__(
@@ -287,7 +295,11 @@ class NextWheel:
         if value == "":
             return
 
-        self.set_time(get_current_time())
+        try:
+            self.set_time(get_current_time())
+        except ConnectTimeout as e:
+            raise TimeoutError from e
+
         # Calibration constants
         self.file_download("calibration.json")
         self._load_calibration("calibration.json")
