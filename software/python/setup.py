@@ -27,9 +27,7 @@ setuptools.setup(
         "Source": "https://github.com/felixchenier/NextWheel",
         "Tracker": "https://github.com/felixchenier/NextWheel/issues",
     },
-    install_requires=[
-        "numpy", "websocket-client", "matplotlib", "requests"
-    ],
+    install_requires=["numpy", "websocket-client", "matplotlib", "requests"],
     classifiers=[
         "Development Status :: 2 - Pre-Alpha",
         "Intended Audience :: Science/Research",

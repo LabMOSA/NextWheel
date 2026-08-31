@@ -25,7 +25,6 @@ from typing import Any
 import numpy as np
 import requests
 import websocket
-
 from requests.exceptions import ConnectTimeout
 
 try:
@@ -252,6 +251,7 @@ class NextWheel:
     >>> print(nw.fetch())
 
     >>> nw.close()
+
     """
 
     def __init__(
@@ -318,9 +318,7 @@ class NextWheel:
             self.has_calibration_matrix = False
             print("No Calibration File Detected")
 
-    def _parse_message(
-        self, stream: bytes, offset: int = 0
-    ) -> int:  # noqa PLR0911 Too many return statements (7 > 6)
+    def _parse_message(self, stream: bytes, offset: int = 0) -> int:  # noqa PLR0911 Too many return statements (7 > 6)
         """
         Parse a series of bytes corresponding to a messages.
 
