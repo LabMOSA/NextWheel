@@ -26,6 +26,8 @@ import numpy as np
 import requests
 import websocket
 
+from requests.exceptions import ConnectTimeout
+
 try:
     from kineticstoolkit import TimeSeries  # type: ignore
 except ModuleNotFoundError:
@@ -236,6 +238,12 @@ class NextWheel:
         - NextWheel.close() close the connection with the instrumented wheel.
     It needs an IP address like in the example below.
 
+    Raises
+    ------
+    TimeoutError
+        When ip.setter cannot connect to the wheel.
+
+
     Exemple
     -------
     >>> from nextwheel import NextWheel
@@ -287,7 +295,11 @@ class NextWheel:
         if value == "":
             return
 
-        self.set_time(get_current_time())
+        try:
+            self.set_time(get_current_time())
+        except ConnectTimeout as e:
+            raise TimeoutError from e
+
         # Calibration constants
         self.file_download("calibration.json")
         self._load_calibration("calibration.json")
@@ -306,7 +318,9 @@ class NextWheel:
             self.has_calibration_matrix = False
             print("No Calibration File Detected")
 
-    def _parse_message(self, stream: bytes, offset: int = 0) -> int:  # noqa PLR0911 Too many return statements (7 > 6)
+    def _parse_message(
+        self, stream: bytes, offset: int = 0
+    ) -> int:  # noqa PLR0911 Too many return statements (7 > 6)
         """
         Parse a series of bytes corresponding to a messages.
 
