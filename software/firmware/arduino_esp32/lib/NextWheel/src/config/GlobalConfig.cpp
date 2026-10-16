@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include "IMU.h"
+#include <IPAddress.h>
 
 const std::vector<uint32_t> GlobalConfig::m_accel_ranges =
     {IMU::IMU_ACC_RANGE_2G, IMU::IMU_ACC_RANGE_4G, IMU::IMU_ACC_RANGE_8G, IMU::IMU_ACC_RANGE_16G};
@@ -46,6 +47,10 @@ void GlobalConfig::print()
     Serial.println(m_config.adc_sample_rate);
     Serial.print("encoder_sample_rate: ");
     Serial.println(m_config.encoder_sample_rate);
+    Serial.print("udp_broadcast_address: ");
+    Serial.println(IPAddress(m_config.udp_broadcast_address));
+    Serial.print("udp_broadcast_port: ");
+    Serial.println(m_config.udp_broadcast_port);
 }
 
 void GlobalConfig::save()
@@ -132,6 +137,28 @@ uint32_t GlobalConfig::get_encoder_sample_rate() const
     return m_config.encoder_sample_rate;
 }
 
+void GlobalConfig::set_udp_broadcast_address(uint32_t address)
+{
+    m_config.udp_broadcast_address = address;
+    save();
+}
+
+uint32_t GlobalConfig::get_udp_broadcast_address() const
+{
+    return m_config.udp_broadcast_address;
+}
+
+void GlobalConfig::set_udp_broadcast_port(uint16_t port)
+{
+    m_config.udp_broadcast_port = port;
+    save();
+}
+
+uint16_t GlobalConfig::get_udp_broadcast_port() const
+{
+    return m_config.udp_broadcast_port;
+}
+
 void GlobalConfig::setDefault()
 {
     Serial.println("GlobalConfig : Setting default config");
@@ -141,6 +168,8 @@ void GlobalConfig::setDefault()
     m_config.imu_sample_rate = m_imu_sampling_rate_ranges[0];
     m_config.adc_sample_rate = m_adc_sampling_rate_ranges[0];
     m_config.encoder_sample_rate = m_encoder_sampling_rate_ranges[0];
+    m_config.udp_broadcast_address = 0xFFFFFFFF; // Default to broadcast address
+    m_config.udp_broadcast_port = 12345; // Default port
     save();
 }
 
@@ -183,6 +212,12 @@ bool GlobalConfig::validate()
 
     if (std::find(m_encoder_sampling_rate_ranges.begin(), m_encoder_sampling_rate_ranges.end(),
                   m_config.encoder_sample_rate) == m_encoder_sampling_rate_ranges.end())
+    {
+        return false;
+    }
+
+    // Config saved by older firmware does not contain UDP settings
+    if (m_config.udp_broadcast_port == 0 || m_config.udp_broadcast_port == 0xFFFF)
     {
         return false;
     }

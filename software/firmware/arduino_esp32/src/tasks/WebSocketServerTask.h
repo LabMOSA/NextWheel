@@ -8,8 +8,11 @@
 #include <data/ConfigDataFrame.h>
 #include <string.h>
 #include <list>
+#if defined(_WEBSOCKET_SERVER_ENABLED)
 #include <WebSocketsServer.h>
+#endif
 #include <WebServer.h>
+#include "tasks/UDPStreamer.h"
 
 
 class WebSocketServerTask : public WorkerTask
@@ -20,14 +23,23 @@ public:
     WebSocketServerTask();
     virtual void run(void* app) override;
     bool isWebSocketConnected();
+    bool isUDPStreaming();
 
 
 protected:
-    void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length);
+    
     void setupRESTAPI();
+    bool startUDPStreaming();
+    bool stopUDPStreaming();
+
+    #ifdef _WEBSOCKET_SERVER_ENABLED
+    void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length);
 
     WebSocketsServer m_webSocketServer;
+    #endif
+
     WebServer m_webServer;
+    UDPStreamer m_udpStreamer;
 };
 
 #endif  // _WEBSOCKET_SERVER_TASK_H_

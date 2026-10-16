@@ -3,11 +3,14 @@
 
 #include <data/DataFrame.h>
 #include <config/GlobalConfig.h>
+#include <cstddef>
 
 class ConfigDataFrame : public DataFrame
 {
 public:
-    const static size_t CONFIG_DATA_FRAME_SIZE = sizeof(GlobalConfig::ConfigData);
+    // Only the sensor configuration is serialized (network settings are excluded)
+    // to keep the frame format compatible with existing clients and recordings.
+    const static size_t CONFIG_DATA_FRAME_SIZE = offsetof(GlobalConfig::ConfigData, udp_broadcast_address);
 
     ConfigDataFrame(const GlobalConfig::ConfigData& configData, uint64_t timestamp = DataFrame::getCurrentTimeStamp());
 

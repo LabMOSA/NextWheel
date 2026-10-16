@@ -67,7 +67,7 @@ bool NextWheelApp::isRecording()
 
 bool NextWheelApp::isStreaming()
 {
-    return m_webSocketServerTask.isWebSocketConnected();
+    return m_webSocketServerTask.isWebSocketConnected() || m_webSocketServerTask.isUDPStreaming();
 }
 
 LEDS& NextWheelApp::getLEDS()
