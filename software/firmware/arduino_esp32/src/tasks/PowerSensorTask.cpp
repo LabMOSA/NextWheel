@@ -1,7 +1,7 @@
 #include "PowerSensorTask.h"
 #include "NextWheelApp.h"
 
-PowerSensorTask::PowerSensorTask() : SensorTask("PowerSensorTask") {}
+PowerSensorTask::PowerSensorTask() : SensorTask("PowerSensorTask", POWER_SENSOR_TASK_STACK_SIZE) {}
 
 void PowerSensorTask::run(void* app)
 {

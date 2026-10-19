@@ -1,4 +1,3 @@
-websocket-client
 matplotlib
 requests
 numpy
