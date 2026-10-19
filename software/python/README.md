@@ -31,7 +31,7 @@ To change where the wheel sends its data (e.g., a different port for each
 wheel, or this computer's IP address instead of broadcast):
 
 ```python
->>> nw.set_udp_destination("255.255.255.255", 12346)
+>>> nw.start_streaming("255.255.255.255", 12346)
 ```
 
 To see the list of recorded data files:

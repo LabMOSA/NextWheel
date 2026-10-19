@@ -140,7 +140,8 @@ uint32_t GlobalConfig::get_encoder_sample_rate() const
 void GlobalConfig::set_udp_broadcast_address(uint32_t address)
 {
     m_config.udp_broadcast_address = address;
-    save();
+    //Not saved, configured at runtime, not persisted to EEPROM
+    //save();
 }
 
 uint32_t GlobalConfig::get_udp_broadcast_address() const
@@ -151,7 +152,8 @@ uint32_t GlobalConfig::get_udp_broadcast_address() const
 void GlobalConfig::set_udp_broadcast_port(uint16_t port)
 {
     m_config.udp_broadcast_port = port;
-    save();
+    //Not saved, configured at runtime, not persisted to EEPROM
+    //save();
 }
 
 uint16_t GlobalConfig::get_udp_broadcast_port() const
@@ -212,12 +214,6 @@ bool GlobalConfig::validate()
 
     if (std::find(m_encoder_sampling_rate_ranges.begin(), m_encoder_sampling_rate_ranges.end(),
                   m_config.encoder_sample_rate) == m_encoder_sampling_rate_ranges.end())
-    {
-        return false;
-    }
-
-    // Config saved by older firmware does not contain UDP settings
-    if (m_config.udp_broadcast_port == 0 || m_config.udp_broadcast_port == 0xFFFF)
     {
         return false;
     }

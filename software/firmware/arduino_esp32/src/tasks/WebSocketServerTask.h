@@ -29,7 +29,7 @@ public:
 protected:
     
     void setupRESTAPI();
-    bool startUDPStreaming();
+    bool startUDPStreaming(uint32_t address, uint16_t port);
     bool stopUDPStreaming();
 
     #ifdef _WEBSOCKET_SERVER_ENABLED

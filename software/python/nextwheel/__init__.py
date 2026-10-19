@@ -241,11 +241,11 @@ class NextWheel:
         - NextWheel.stop_streaming() stops the stream.
     It needs an IP address like in the example below.
 
-    The wheel sends its data to the UDP address and port stored in its
-    configuration (by default, broadcast 255.255.255.255 on port 12345). Use
-    NextWheel.set_udp_destination() to change them, for instance to use a
-    different port for each wheel. The local firewall must accept incoming
-    UDP datagrams on this port.
+    The wheel sends its data to the UDP address and port given to
+    NextWheel.start_streaming() (by default, broadcast 255.255.255.255 on
+    port 12345). Use a different port for each wheel to reduce network load
+    on each receiver. The local firewall must accept incoming UDP datagrams
+    on this port.
 
     Raises
     ------
@@ -531,8 +531,10 @@ class NextWheel:
                 "encoder_sampling_rate"
             ]
 
-    def start_streaming(
+    def start_streaming(  # noqa: PLR0913
         self,
+        address: str = "255.255.255.255",
+        port: int = DEFAULT_UDP_PORT,
         max_imu_samples: int = 1000,
         max_analog_samples: int = 1000,
         max_encoder_samples: int = 100,
@@ -543,6 +545,13 @@ class NextWheel:
 
         Parameters
         ----------
+        address : str, optional
+            IP address (x.x.x.x) where the wheel sends the streamed data. The
+            default 255.255.255.255 broadcasts to the whole local network.
+            Using the IP address of this computer avoids broadcasting.
+        port : int, optional
+            UDP port where the wheel sends the streamed data, and where this
+            computer listens. The default is 12345.
         max_imu_samples : int, optional
             Maximum IMU data to keep in memory. The default is 1000.
         max_analog_samples : int, optional
@@ -570,7 +579,6 @@ class NextWheel:
         # API so that the data can be converted in any case.
         params = self.get_sensors_params()
         self._update_config_from_params(params)
-        port = int(params.get("udp_broadcast_port", DEFAULT_UDP_PORT))
 
         udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -596,17 +604,23 @@ class NextWheel:
                 "Listening on UDP port",
                 port,
                 "for data sent to",
-                params.get("udp_broadcast_address"),
+                address,
             )
 
-        # Ask the wheel to start streaming. Error 400 means that the wheel is
-        # already streaming, which is fine.
+        # Ask the wheel to start streaming. "Already streaming" means that
+        # another client started it (possibly to another destination), which
+        # is fine.
         response = requests.get(
-            f"http://{self.ip}:{self.port}/start_streaming"
+            f"http://{self.ip}:{self.port}/start_streaming",
+            params={"address": address, "port": port},
         )
-        if response.status_code not in (
-            HTTP_RESPONSE_CODE_OK,
-            HTTP_RESPONSE_CODE_BAD_REQUEST,
+        already_streaming = (
+            response.status_code == HTTP_RESPONSE_CODE_BAD_REQUEST
+            and "Already streaming" in response.text
+        )
+        if (
+            response.status_code != HTTP_RESPONSE_CODE_OK
+            and not already_streaming
         ):
             self.stop_streaming()
             raise RuntimeError(
@@ -638,18 +652,20 @@ class NextWheel:
                 self._udp_socket = None
             self._thread_is_running = False
 
-    def monitor(self) -> None:
+    def monitor(
+        self, address: str = "255.255.255.255", port: int = DEFAULT_UDP_PORT
+    ) -> None:
         """
         Blocking function that monitors the sensors measurements.
 
         This function shows the current sensor states in a simple GUI
         for testing and monitoring. To log data, use NextWheel.fetch()
-        instead.
+        instead. See start_streaming() for address and port.
         """
         # Don't import until needed.
         import nextwheel.monitor as nwm  # noqa
 
-        self.start_streaming()
+        self.start_streaming(address, port)
         nwm.monitor(self)
         self.stop_streaming()
 
@@ -934,9 +950,6 @@ class NextWheel:
         encoder_sampling_rate: int,
         accelerometer_precision: int,
         gyrometer_precision: int,
-        *,
-        udp_broadcast_address: str | None = None,
-        udp_broadcast_port: int | None = None,
     ) -> requests.Response:
         """
         Set the parameters of the instrumented wheel.
@@ -956,72 +969,24 @@ class NextWheel:
         gyrometer_precision
             Gyrometer range, in degrees per second. Valid values are 250, 500,
             1000, 2000.
-        udp_broadcast_address
-            Optional. IP address (x.x.x.x) where the wheel sends the streamed
-            data. Use 255.255.255.255 to broadcast, or the IP address of this
-            computer. Unchanged if not provided.
-        udp_broadcast_port
-            Optional. UDP port where the wheel sends the streamed data.
-            Unchanged if not provided.
 
         Returns
         -------
         requests.Response
 
         """
-        params: dict[str, int | str] = {
+        params = {
             "adc_sampling_rate": adc_sampling_rate,
             "imu_sampling_rate": imu_sampling_rate,
             "encoder_sampling_rate": encoder_sampling_rate,
             "accelerometer_precision": accelerometer_precision,
             "gyrometer_precision": gyrometer_precision,
         }
-        if udp_broadcast_address is not None:
-            params["udp_broadcast_address"] = udp_broadcast_address
-        if udp_broadcast_port is not None:
-            params["udp_broadcast_port"] = udp_broadcast_port
 
         response = requests.post(
             f"http://{self.ip}:{self.port}/config_update", params=params
         )
         return response
-
-    def set_udp_destination(
-        self, address: str = "255.255.255.255", port: int = DEFAULT_UDP_PORT
-    ) -> requests.Response:
-        """
-        Set where the instrumented wheel sends the streamed data.
-
-        The sensor parameters are kept unchanged. If the wheel is currently
-        streaming, call stop_streaming() and start_streaming() again to
-        receive on the new port.
-
-        Parameters
-        ----------
-        address
-            IP address (x.x.x.x) where the wheel sends the streamed data. The
-            default 255.255.255.255 broadcasts to the whole local network.
-            Using the IP address of this computer avoids broadcasting.
-        port
-            UDP port where the wheel sends the streamed data. The default is
-            12345. When using several wheels, using a different port for each
-            wheel reduces network load on each receiver.
-
-        Returns
-        -------
-        requests.Response
-
-        """
-        params = self.get_sensors_params()
-        return self.set_sensors_params(
-            adc_sampling_rate=params["adc_sampling_rate"],
-            imu_sampling_rate=params["imu_sampling_rate"],
-            encoder_sampling_rate=params["encoder_sampling_rate"],
-            accelerometer_precision=params["accelerometer_precision"],
-            gyrometer_precision=params["gyrometer_precision"],
-            udp_broadcast_address=address,
-            udp_broadcast_port=port,
-        )
 
     def get_sensors_params(self) -> dict:
         """

@@ -162,12 +162,16 @@ bool WebSocketServerTask::isUDPStreaming()
     return m_udpStreamer.isStreaming();
 }
 
-bool WebSocketServerTask::startUDPStreaming()
+bool WebSocketServerTask::startUDPStreaming(uint32_t address, uint16_t port)
 {
     if (m_udpStreamer.isStreaming())
     {
         return false;
     }
+
+    // Destination is stored in the config, UDPStreamer reads it when sending
+    GlobalConfig::instance().set_udp_broadcast_address(address);
+    GlobalConfig::instance().set_udp_broadcast_port(port);
 
     if (!m_udpStreamer.start())
     {
@@ -318,32 +322,11 @@ void WebSocketServerTask::setupRESTAPI()
                 m_webServer.hasArg("imu_sampling_rate") && m_webServer.hasArg("adc_sampling_rate") &&
                 m_webServer.hasArg("encoder_sampling_rate"))
             {
-                // UDP settings are optional, validate them before changing anything
-                IPAddress udp_address(GlobalConfig::instance().get_udp_broadcast_address());
-                if (m_webServer.hasArg("udp_broadcast_address") &&
-                    !udp_address.fromString(m_webServer.arg("udp_broadcast_address")))
-                {
-                    m_webServer.send(400, "text/plain", "Invalid udp_broadcast_address (expected x.x.x.x)");
-                    return;
-                }
-                long udp_port = GlobalConfig::instance().get_udp_broadcast_port();
-                if (m_webServer.hasArg("udp_broadcast_port"))
-                {
-                    udp_port = m_webServer.arg("udp_broadcast_port").toInt();
-                    if (udp_port <= 0 || udp_port >= 0xFFFF)
-                    {
-                        m_webServer.send(400, "text/plain", "Invalid udp_broadcast_port");
-                        return;
-                    }
-                }
-
                 GlobalConfig::instance().set_accel_range(m_webServer.arg("accelerometer_precision").toInt());
                 GlobalConfig::instance().set_gyro_range(m_webServer.arg("gyrometer_precision").toInt());
                 GlobalConfig::instance().set_imu_sample_rate(m_webServer.arg("imu_sampling_rate").toInt());
                 GlobalConfig::instance().set_adc_sample_rate(m_webServer.arg("adc_sampling_rate").toInt());
                 GlobalConfig::instance().set_encoder_sample_rate(m_webServer.arg("encoder_sampling_rate").toInt());
-                GlobalConfig::instance().set_udp_broadcast_address(uint32_t(udp_address));
-                GlobalConfig::instance().set_udp_broadcast_port(udp_port);
 
                 // Print current config
                 Serial.println("Current config:");
@@ -352,9 +335,6 @@ void WebSocketServerTask::setupRESTAPI()
                 Serial.printf("IMU sampling rate: %d\n", GlobalConfig::instance().get_imu_sample_rate());
                 Serial.printf("ADC sampling rate: %d\n", GlobalConfig::instance().get_adc_sample_rate());
                 Serial.printf("Encoder sampling rate: %d\n", GlobalConfig::instance().get_encoder_sample_rate());
-                Serial.printf("UDP broadcast address: %s\n",
-                              IPAddress(GlobalConfig::instance().get_udp_broadcast_address()).toString().c_str());
-                Serial.printf("UDP broadcast port: %d\n", GlobalConfig::instance().get_udp_broadcast_port());
 
                 m_webServer.send(200, "text/plain", "OK");
             }
@@ -364,7 +344,7 @@ void WebSocketServerTask::setupRESTAPI()
                     400,
                     "text/plain",
                     "Missing arguments (accelerometer_precision, gyrometer_precision, imu_sampling_rate, "
-                    "adc_sampling_rate, encoder_sampling_rate), optional (udp_broadcast_address, udp_broadcast_port)");
+                    "adc_sampling_rate, encoder_sampling_rate)");
             }
         });
 
@@ -382,10 +362,12 @@ void WebSocketServerTask::setupRESTAPI()
             cJSON_AddNumberToObject(root, "imu_sampling_rate", GlobalConfig::instance().get_imu_sample_rate());
             cJSON_AddNumberToObject(root, "adc_sampling_rate", GlobalConfig::instance().get_adc_sample_rate());
             cJSON_AddNumberToObject(root, "encoder_sampling_rate", GlobalConfig::instance().get_encoder_sample_rate());
+            /*
             cJSON_AddStringToObject(
                 root, "udp_broadcast_address",
                 IPAddress(GlobalConfig::instance().get_udp_broadcast_address()).toString().c_str());
             cJSON_AddNumberToObject(root, "udp_broadcast_port", GlobalConfig::instance().get_udp_broadcast_port());
+            */
             String json(cJSON_Print(root));
 
             // Free memory
@@ -460,7 +442,25 @@ void WebSocketServerTask::setupRESTAPI()
         [this]()
         {
             Serial.println("get: /start_streaming");
-            if (startUDPStreaming())
+            if (!m_webServer.hasArg("address") || !m_webServer.hasArg("port"))
+            {
+                m_webServer.send(400, "text/plain", "Missing arguments (address, port)");
+                return;
+            }
+            IPAddress udp_address;
+            if (!udp_address.fromString(m_webServer.arg("address")))
+            {
+                m_webServer.send(400, "text/plain", "Invalid address (expected x.x.x.x)");
+                return;
+            }
+            long udp_port = m_webServer.arg("port").toInt();
+            if (udp_port <= 0 || udp_port >= 0xFFFF)
+            {
+                m_webServer.send(400, "text/plain", "Invalid port");
+                return;
+            }
+
+            if (startUDPStreaming(uint32_t(udp_address), udp_port))
             {
                 m_webServer.send(200, "text/plain", "OK");
             }
