@@ -1,4 +1,4 @@
-#include "WebSocketServerTask.h"
+#include "WebServerTask.h"
 #include "config/GlobalConfig.h"
 #include "NextWheelApp.h"
 #include <esp_task_wdt.h>
@@ -9,19 +9,16 @@
 #include <SD_MMC.h>
 
 
-WebSocketServerTask::WebSocketServerTask()
-    : WorkerTask("WebSocketServerTask", WEBSOCKET_SERVER_STACK_SIZE),
-#ifdef _WEBSOCKET_SERVER_ENABLED
-      m_webSocketServer(81),
-#endif
+WebServerTask::WebServerTask()
+    : WorkerTask("WebServerTask", WEB_SERVER_STACK_SIZE),
       m_webServer(80)
 {
 }
 
 
-void WebSocketServerTask::run(void* app)
+void WebServerTask::run(void* app)
 {
-    Serial.printf("WebSocketServerTask::run Priority: %li Core: %li \n", uxTaskPriorityGet(NULL), xPortGetCoreID());
+    Serial.printf("WebServerTask::run Priority: %li Core: %li \n", uxTaskPriorityGet(NULL), xPortGetCoreID());
 
     WiFi.begin(WIFI_DEFAULT_SSID, WIFI_DEFAULT_PASSWORD);
     // put your setup code here, to run once:
@@ -35,21 +32,12 @@ void WebSocketServerTask::run(void* app)
 
     TickType_t lastGeneration = xTaskGetTickCount();
 
-#ifdef _WEBSOCKET_SERVER_ENABLED    
-    m_webSocketServer.begin();
-    m_webSocketServer.onEvent([this](uint8_t num, WStype_t type, uint8_t* payload, size_t length)
-                              { this->webSocketEvent(num, type, payload, length); });
-#endif
-
     setupRESTAPI();
     m_webServer.begin();
 
     while (1)
     {
-        // Serial.println("WebSocketServerTask::run: m_webSocketServer.loop()");
-#ifdef _WEBSOCKET_SERVER_ENABLED        
-        m_webSocketServer.loop();
-#endif
+        // Serial.println("WebServerTask::run: m_webServer.loop()");
         m_webServer.handleClient();
 
         // First empty the command queue (timeout=0, not waiting)
@@ -59,26 +47,17 @@ void WebSocketServerTask::run(void* app)
             switch (command)
             {
                 case Task::BASE_TASK_COMMAND_NONE:
-                    Serial.println("WebSocketServerTask::run: BASE_TASK_COMMAND_NONE");
+                    Serial.println("WebServerTask::run: BASE_TASK_COMMAND_NONE");
                     break;
                 case Task::BASE_TASK_CONFIG_UPDATED:
                 {
-                    Serial.println("WebSocketServerTask::run: BASE_TASK_CONFIG_UPDATED");
+                    Serial.println("WebServerTask::run: BASE_TASK_CONFIG_UPDATED");
 
                     // We should update the configuration info from now
                     ConfigDataFrame configDataFrame(GlobalConfig::instance().get());
 
                     // Send to UDP destination (does nothing if not streaming)
                     m_udpStreamer.sendFrame(configDataFrame);
-                    
-#ifdef _WEBSOCKET_SERVER_ENABLED
-                    for (auto id = 0; id < m_webSocketServer.connectedClients(); id++)
-                    {
-                        uint8_t config_data[configDataFrame.getTotalSize()];
-                        configDataFrame.serialize(config_data, configDataFrame.getTotalSize());
-                        m_webSocketServer.sendBIN(id, config_data, configDataFrame.getTotalSize());
-                    }
-#endif
 
                     // Empty the queue (with old config!)
                     while (DataFramePtr dataPtr = dequeue(0))
@@ -89,7 +68,7 @@ void WebSocketServerTask::run(void* app)
                 break;
 
                 default:
-                    Serial.print("WebSocketServerTask::run: Unknown command: ");
+                    Serial.print("WebServerTask::run: Unknown command: ");
                     Serial.println(command);
                     break;
             }
@@ -136,33 +115,16 @@ void WebSocketServerTask::run(void* app)
 
             // Send to UDP destination (does nothing if not streaming)
             m_udpStreamer.send(super_frame, total_payload_size + DataFrame::HEADER_SIZE);
-
-#ifdef _WEBSOCKET_SERVER_ENABLED
-            // Send to all websockets
-            for (auto id = 0; id < m_webSocketServer.connectedClients(); id++)
-            {
-                m_webSocketServer.sendBIN(id, super_frame, total_payload_size + DataFrame::HEADER_SIZE);
-            }
-#endif
         }
     }  // while(1)
 }
 
-bool WebSocketServerTask::isWebSocketConnected()
-{
-#ifdef _WEBSOCKET_SERVER_ENABLED
-    return m_webSocketServer.connectedClients() > 0;
-#else
-    return false;
-#endif
-}
-
-bool WebSocketServerTask::isUDPStreaming()
+bool WebServerTask::isUDPStreaming()
 {
     return m_udpStreamer.isStreaming();
 }
 
-bool WebSocketServerTask::startUDPStreaming(uint32_t address, uint16_t port)
+bool WebServerTask::startUDPStreaming(uint32_t address, uint16_t port)
 {
     if (m_udpStreamer.isStreaming())
     {
@@ -189,18 +151,18 @@ bool WebSocketServerTask::startUDPStreaming(uint32_t address, uint16_t port)
     ConfigDataFrame configDataFrame(GlobalConfig::instance().get());
     m_udpStreamer.sendFrame(configDataFrame);
 
-    NextWheelApp::instance()->registerSensorTasksToWebSocketServer();
+    NextWheelApp::instance()->registerSensorTasksToWebServer();
     return true;
 }
 
-bool WebSocketServerTask::stopUDPStreaming()
+bool WebServerTask::stopUDPStreaming()
 {
     if (!m_udpStreamer.isStreaming())
     {
         return false;
     }
 
-    NextWheelApp::instance()->unregisterSensorTasksFromWebSocketServer();
+    NextWheelApp::instance()->unregisterSensorTasksFromWebServer();
     Serial.printf("UDP streaming stopped, dropped packets: %u\n", m_udpStreamer.getDroppedPackets());
     m_udpStreamer.stop();
 
@@ -209,55 +171,12 @@ bool WebSocketServerTask::stopUDPStreaming()
     return true;
 }
 
-#ifdef _WEBSOCKET_SERVER_ENABLED
-void WebSocketServerTask::webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length)
-{
-    switch (type)
-    {
-        case WStype_DISCONNECTED:
-            Serial.printf("[%u] Disconnected!\n", num);
-            SystemState::instance().getState().streaming = false;
-            NextWheelApp::instance()->playStopStreamingSound();
-            NextWheelApp::instance()->unregisterSensorTasksFromWebSocketServer();
-            break;
-        case WStype_CONNECTED:
-        {
-            IPAddress ip = m_webSocketServer.remoteIP(num);
-            Serial.printf("[%u] Connected from %d.%d.%d.%d url: %s\n", num, ip[0], ip[1], ip[2], ip[3], payload);
-            SystemState::instance().getState().streaming = true;
-            NextWheelApp::instance()->playStartStreamingSound();
-
-            // Send the current configuration
-            ConfigDataFrame configDataFrame(GlobalConfig::instance().get());
-            uint8_t config_data[configDataFrame.getTotalSize()];
-            configDataFrame.serialize(config_data, configDataFrame.getTotalSize());
-            m_webSocketServer.sendBIN(num, config_data, configDataFrame.getTotalSize());
-
-            NextWheelApp::instance()->registerSensorTasksToWebSocketServer();
-        }
-        break;
-        case WStype_TEXT:
-            Serial.printf("[%u] get Text: %s\n", num, payload);
-            break;
-        case WStype_BIN:
-            Serial.printf("[%u] get binary length: %u\n", num, length);
-            break;
-        case WStype_ERROR:
-        case WStype_FRAGMENT_TEXT_START:
-        case WStype_FRAGMENT_BIN_START:
-        case WStype_FRAGMENT:
-        case WStype_FRAGMENT_FIN:
-            break;
-    }
-}
-#endif
-
-void WebSocketServerTask::setupRESTAPI()
+void WebServerTask::setupRESTAPI()
 {
     m_webServer.onNotFound(
         [this]()
         {
-            Serial.println("WebSocketServerTask::setupRESTAPI: onNotFound");
+            Serial.println("WebServerTask::setupRESTAPI: onNotFound");
             String message = "Not Found\n\n";
             message += "URI: ";
             message += m_webServer.uri();
@@ -279,7 +198,7 @@ void WebSocketServerTask::setupRESTAPI()
         HTTP_GET,
         [this]()
         {
-            Serial.println("WebSocketServerTask::setupRESTAPI: /");
+            Serial.println("WebServerTask::setupRESTAPI: /");
             String message = "Hello from NextWheel REST API Server !";
             m_webServer.send(200, "text/plain", message);
         });

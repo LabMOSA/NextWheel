@@ -20,8 +20,8 @@ void NextWheelApp::begin()
     m_sdCardWorkerTask.setPriority(TASK_PRIORITY_HIGH);
 
     // SAME CORE AS WiFi, BLE
-    m_webSocketServerTask.setCore(0);
-    m_webSocketServerTask.setPriority(TASK_PRIORITY_LOW);
+    m_webServerTask.setCore(0);
+    m_webServerTask.setPriority(TASK_PRIORITY_LOW);
 
     m_adcTask.setCore(1);
     m_adcTask.setPriority(TASK_PRIORITY_HIGHEST);
@@ -46,9 +46,9 @@ void NextWheelApp::start()
 
 
 #ifndef NEXTWHEEL_DISABLE_WIFI
-    m_webSocketServerTask.start(this);
+    m_webServerTask.start(this);
 #else
-    Serial.println("WiFi + WebSocketServerTask disabled");
+    Serial.println("WiFi + WebServerTask disabled");
 #endif
 
 
@@ -67,7 +67,7 @@ bool NextWheelApp::isRecording()
 
 bool NextWheelApp::isStreaming()
 {
-    return m_webSocketServerTask.isWebSocketConnected() || m_webSocketServerTask.isUDPStreaming();
+    return m_webServerTask.isUDPStreaming();
 }
 
 LEDS& NextWheelApp::getLEDS()
@@ -138,25 +138,25 @@ void NextWheelApp::unregisterSensorTasksFromSDCardWorker()
     xSemaphoreGive(m_queueMutex);
 }
 
-void NextWheelApp::registerSensorTasksToWebSocketServer()
+void NextWheelApp::registerSensorTasksToWebServer()
 {
-    Serial.println("Registering sensor tasks to WebSocketServerTask");
+    Serial.println("Registering sensor tasks to WebServerTask");
     xSemaphoreTake(m_queueMutex, portMAX_DELAY);
-    m_adcTask.registerDataQueue(m_webSocketServerTask.getQueue());
-    m_imuTask.registerDataQueue(m_webSocketServerTask.getQueue());
-    m_powerTask.registerDataQueue(m_webSocketServerTask.getQueue());
-    m_quadEncoderTask.registerDataQueue(m_webSocketServerTask.getQueue());
+    m_adcTask.registerDataQueue(m_webServerTask.getQueue());
+    m_imuTask.registerDataQueue(m_webServerTask.getQueue());
+    m_powerTask.registerDataQueue(m_webServerTask.getQueue());
+    m_quadEncoderTask.registerDataQueue(m_webServerTask.getQueue());
     xSemaphoreGive(m_queueMutex);
 }
 
-void NextWheelApp::unregisterSensorTasksFromWebSocketServer()
+void NextWheelApp::unregisterSensorTasksFromWebServer()
 {
-    Serial.println("Unregistering sensor tasks from WebSocketServerTask");
+    Serial.println("Unregistering sensor tasks from WebServerTask");
     xSemaphoreTake(m_queueMutex, portMAX_DELAY);
-    m_adcTask.unregisterDataQueue(m_webSocketServerTask.getQueue());
-    m_imuTask.unregisterDataQueue(m_webSocketServerTask.getQueue());
-    m_powerTask.unregisterDataQueue(m_webSocketServerTask.getQueue());
-    m_quadEncoderTask.unregisterDataQueue(m_webSocketServerTask.getQueue());
+    m_adcTask.unregisterDataQueue(m_webServerTask.getQueue());
+    m_imuTask.unregisterDataQueue(m_webServerTask.getQueue());
+    m_powerTask.unregisterDataQueue(m_webServerTask.getQueue());
+    m_quadEncoderTask.unregisterDataQueue(m_webServerTask.getQueue());
     xSemaphoreGive(m_queueMutex);
 }
 
@@ -213,7 +213,7 @@ void NextWheelApp::sendConfigUpdateEvent(bool from_isr)
     m_quadEncoderTask.sendBaseCommandEvent(Task::BASE_TASK_CONFIG_UPDATED, from_isr);
     // Workers
     m_sdCardWorkerTask.sendBaseCommandEvent(Task::BASE_TASK_CONFIG_UPDATED, from_isr);
-    m_webSocketServerTask.sendBaseCommandEvent(Task::BASE_TASK_CONFIG_UPDATED, from_isr);
+    m_webServerTask.sendBaseCommandEvent(Task::BASE_TASK_CONFIG_UPDATED, from_isr);
 }
 
 

@@ -72,7 +72,7 @@ Once a WebSocket connection is established, the client and server exchange data 
 | 7=QUADENCODER  | UNIX MICROSECONDS    | 8 BYTES             | 1 INT64 (See [QuadEncoderDataFrame](lib/NextWheel/src/data/QuadEncoderDataFrame.h))|
 | 255=SUPERFRAME | UNIX MICROSECONDS    | NB INCLUDED FRAMES  | VARIABLE NUMBER OF FULL FRAMES |
 
-> Note 2: To avoid sending small packets with high overhead ratio (data size small vs websocket overhead), the [WebSocketServerTask](src/tasks/WebSocketServerTask.h) sends periodic superframes of type 255 at a rate of 20Hz, wich is the aggregation of all accumulated frames in a 50 ms period. This allows to maximize the bandwidth and minimize the TCP/IP embedded stack overhead. Every data frame is timstamped, so we can recover all data chronologically.
+> Note 2: To avoid sending small packets with high overhead ratio (data size small vs websocket overhead), the [WebServerTask](arduino_esp32/src/tasks/WebServerTask.h) sends periodic superframes of type 255 at a rate of 20Hz, wich is the aggregation of all accumulated frames in a 50 ms period. This allows to maximize the bandwidth and minimize the TCP/IP embedded stack overhead. Every data frame is timstamped, so we can recover all data chronologically.
 
 ### ADC and IMU VALUE CONVERSION
 
