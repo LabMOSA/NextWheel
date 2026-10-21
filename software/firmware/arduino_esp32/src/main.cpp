@@ -148,7 +148,7 @@ void loop()
                 NextWheelApp::instance()->getLEDS().setLED1(false);
             }
 
-            // LED 2 - Streaming (WebSocket)
+            // LED 2 - Streaming (UDP)
             if (NextWheelApp::instance()->isStreaming())
             {
                 NextWheelApp::instance()->getLEDS().toggleLED2();

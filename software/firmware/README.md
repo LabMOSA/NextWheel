@@ -51,11 +51,22 @@ Default address : 0x40
 
 ADS8688  IDBTR
 
-## WiFi / WebSocket Protocol
+## WiFi / UDP Streaming Protocol
 
-Once a WebSocket connection is established, the client and server exchange data via the WebSocket protocol in binary format : application messages, using the HTTP protocol, are split into one or more frames, adding a little overhead that needs to be considered, especially if we send small amount of data at once.
+Sensor data is streamed over UDP by the [UDPStreamer](arduino_esp32/src/tasks/UDPStreamer.cpp), while control is done with the [REST API](#rest-api) over HTTP (port 80).
 
-### WebSocket Binary Message Format
+1. The client opens a UDP socket bound to a port of its choice (Python API default: 12345).
+2. The client calls `/start_streaming?address=x.x.x.x&port=n` to give the destination of the stream. The address can be the IP of the client (unicast, recommended) or a broadcast address such as `255.255.255.255` (default of the Python API), which reaches every host on the local network.
+3. The wheel first sends a CONFIG frame (type 1), required to convert raw values, then data superframes (type 255). A new CONFIG frame is sent every time the configuration changes (`/config_update`). Data frames still queued with the previous configuration are discarded.
+4. The client calls `/stop_streaming` to stop the stream.
+
+Since UDP is connectionless:
+
+* There is no retransmission and no ordering guarantee. Datagrams are sent non-blocking and are dropped (counted as dropped packets) if the WiFi stack is out of buffers. Clients must tolerate lost datagrams.
+* Each datagram is self-contained: it holds one or more complete frames, never a partial frame, so it can be decoded independently of the others.
+* Streaming continues until `/stop_streaming` is called, even if the client goes away.
+
+### UDP Binary Message Format
 
 > Note 1: Bytes are ordered little endian (lsb first)
 > Note 2: Protocol optimized for more efficiency using raw data when possible. Conversions need to occur in client code.
@@ -72,7 +83,7 @@ Once a WebSocket connection is established, the client and server exchange data 
 | 7=QUADENCODER  | UNIX MICROSECONDS    | 8 BYTES             | 1 INT64 (See [QuadEncoderDataFrame](lib/NextWheel/src/data/QuadEncoderDataFrame.h))|
 | 255=SUPERFRAME | UNIX MICROSECONDS    | NB INCLUDED FRAMES  | VARIABLE NUMBER OF FULL FRAMES |
 
-> Note 2: To avoid sending small packets with high overhead ratio (data size small vs websocket overhead), the [WebServerTask](arduino_esp32/src/tasks/WebServerTask.h) sends periodic superframes of type 255 at a rate of 20Hz, wich is the aggregation of all accumulated frames in a 50 ms period. This allows to maximize the bandwidth and minimize the TCP/IP embedded stack overhead. Every data frame is timstamped, so we can recover all data chronologically.
+> Note 3: To avoid sending small packets with a high overhead ratio (small data size vs UDP/IP headers), the [WebServerTask](arduino_esp32/src/tasks/WebServerTask.cpp) aggregates all queued frames into a superframe of type 255, sent as a single UDP datagram. A superframe is sent when its payload reaches approximately 1400 bytes (to stay below the WiFi MTU and avoid IP fragmentation) or when no new frame arrives for 50 ms. Every data frame is timestamped, so all data can be recovered chronologically.
 
 ### ADC and IMU VALUE CONVERSION
 
@@ -180,16 +191,45 @@ class GlobalConfig:
 Values are already converted on device. Size optimization of the binary stream was not very practical and useful for those low bandwidth values.
 
 
+## Time Synchronization (NTP)
+
+The system time is used to timestamp every data frame (UNIX microseconds) and to generate recording file names.
+
+* At boot, the system time is initialized from the [RTC](arduino_esp32/lib/NextWheel/src/RTC.cpp) (MCP7940M with battery backup). The RTC stores UTC time.
+* Each time an IP address is obtained (connection, reconnection or IP change), SNTP is (re)started by the [WebServerTask](arduino_esp32/src/tasks/WebServerTask.cpp).
+* Time is then resynchronized every 3 hours (Arduino-ESP32 default `CONFIG_LWIP_SNTP_UPDATE_DELAY`). The interval can be changed with `sntp_set_sync_interval()` (minimum 15 seconds).
+* Corrections are applied gradually (`SNTP_SYNC_MODE_SMOOTH`, using `adjtime`) to avoid timestamp jumps while recording or streaming. If the error is larger than 35 minutes (e.g. RTC never set), the time is set immediately.
+* After each synchronization, the NTP time is written back to the RTC so the next boot starts with a corrected time, even without WiFi.
+* The NTP server requires Internet access from the WiFi network. Without it, the system keeps running on RTC time.
+* `/config_set_time` still sets the time manually, but it will be overridden at the next NTP synchronization.
+
+| **Define** | **Default** | **Description** |
+|------------|-------------|-----------------|
+| `NTP_DEFAULT_SERVER` | `"pool.ntp.org"` | NTP server ([WebServerTask.h](arduino_esp32/src/tasks/WebServerTask.h)) |
+| `NEXTWHEEL_TIMEZONE` | `"EST5EDT,M3.2.0,M11.1.0"` | POSIX TZ string for local time, America/Toronto ([RTC.h](arduino_esp32/lib/NextWheel/src/RTC.h)) |
+
+Both can be overridden with `build_flags` in [platformio.ini](arduino_esp32/platformio.ini), for example:
+
+```ini
+build_flags = -DNTP_DEFAULT_SERVER=\"ca.pool.ntp.org\"
+```
+
 ## REST API
 
-|**Url**   | **HTTP Method** |  **Param(s)**   | **Return** | **Description**   |
+All endpoints are served on HTTP port 80. Text responses are `text/plain`, JSON responses are `application/json`. Unknown URLs return 404 with the request details.
+
+|**Url**   | **HTTP Method** |  **Param(s)**   | **Return** | **Description**   |
 |-----|-----------|----|-----------|---|
-/config_set_time | POST | *time* (int) = unix timestamp | 200 (OK) |Set system time from unix timestamp
-/config_update | POST | accelerometer_precision (int)[], gyrometer_precision (int) [], imu_sampling_rate(int) [], adc_sampling_rate (int)[], encoder_sampling_rate (int)[]| 200 (OK), 400 (Unknown parameter)| Set the sensor configuration
-/config | GET | None | 200, JSON={"accelerometer_precision": value, "gyrometer_precision": value, "imu_sampling_rate": value, "adc_sampling_rate": value, "encoder_sampling_rate": value} | Get the current sensor configuration.
-/system_state | GET | None | 200, JSON = {"recording": (bool) recording_flag, "streaming": (bool) streaming_flag, "filename": (string) recording_filename } | Return the current state of the system.
-/start_recording | GET | None | 200, "OK", 400, "Already recording." | Start recording on SDCard. File name will be automatically generated with current time.
-/stop_recording | GET | None | 200, "0K", 400, "Not recording." | Stop recording to SD Card.
-/file_list | GET | None | 200, JSON Dict containing {"files": [{"name": file_size(string), "size": file_size(int)}, ...], "download_url": url_for_file_download(string), "delete_url": url_for_file_delete(string)} | Get all the file information stored in the SD Card.
-/file_delete | GET | file (string) The name of the file | 200 (OK), 400 (Bad Parameter) | Delete the file from the SD CARD.
-/file_download | GET | file (string) The name of the file | The file in binary format or 404 not found. | The file is is transfered from the SDCARD.
+/ | GET | None | 200, "Hello from NextWheel REST API Server !" | Check that the server is running.
+/config_set_time | POST | time (int) unix timestamp in seconds | 200 (OK), 400 (Missing time argument) | Set the system time and the RTC from a unix timestamp. Overridden at the next NTP synchronization, see [Time Synchronization](#time-synchronization-ntp).
+/ntp_time | GET | None | 200, JSON = {"synced": (bool) ntp_response_received, "server": (string) ntp_server, "time": (float) current_unix_time_seconds, "local_time": (string) ISO 8601 local time with UTC offset, "last_sync": (int) unix_time_of_last_sync, "adjusting": (float) remaining_gradual_correction_seconds} | Get the current time and NTP synchronization status. `adjusting` is 0 when the system time is fully synchronized.
+/config_update | POST | accelerometer_precision (int), gyrometer_precision (int), imu_sampling_rate (int), adc_sampling_rate (int), encoder_sampling_rate (int). All are required. | 200 (OK), 400 (Missing arguments) | Set and save the sensor configuration. It is applied immediately to all sensors, and a new CONFIG frame is written to the current recording and sent on the UDP stream.
+/config | GET | None | 200, JSON = {"accelerometer_precision": (int), "gyrometer_precision": (int), "imu_sampling_rate": (int), "adc_sampling_rate": (int), "encoder_sampling_rate": (int)} | Get the current sensor configuration.
+/system_state | GET | None | 200, JSON = {"recording": (int 0/1) recording_flag, "streaming": (int 0/1) streaming_flag, "filename": (string) recording_filename} | Get the current state of the system.
+/start_streaming | GET | address (string) destination IP (x.x.x.x, unicast or broadcast), port (int) destination UDP port (1-65534) | 200 (OK), 400 (Missing arguments, Invalid address, Invalid port, Already streaming) | Start streaming data over UDP to address:port. See [UDP Streaming Protocol](#wifi--udp-streaming-protocol).
+/stop_streaming | GET | None | 200 (OK), 400 (Not streaming) | Stop UDP streaming.
+/start_recording | GET | None | 200 (OK), 400 (Already recording) | Start recording on the SD card. The file name is generated from the current local time (`log_YYYY-MM-DD_HH-MM-SS.dat`).
+/stop_recording | GET | None | 200 (OK), 400 (Not recording) | Stop recording on the SD card.
+/file_list | GET | None | 200, JSON = {"files": [{"name": (string) file_name, "size": (int) file_size_bytes}, ...], "download_url": "/file_download", "delete_url": "/file_delete"} | List the recording files (`.dat`) stored on the SD card.
+/file_delete | GET | file (string) file name | 200 (OK), 400 (File not found, Missing file argument) | Delete a file from the SD card.
+/file_download | GET | file (string) file name | 200, file content (`application/octet-stream`, with `Content-Disposition` and `Content-Length`), 400 (File not found, Missing file argument) | Download a file from the SD card.

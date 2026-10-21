@@ -140,8 +140,8 @@ uint32_t GlobalConfig::get_encoder_sample_rate() const
 void GlobalConfig::set_udp_broadcast_address(uint32_t address)
 {
     m_config.udp_broadcast_address = address;
-    //Not saved, configured at runtime, not persisted to EEPROM
-    //save();
+    // Not saved, configured at runtime, not persisted to EEPROM
+    // save();
 }
 
 uint32_t GlobalConfig::get_udp_broadcast_address() const
@@ -152,8 +152,8 @@ uint32_t GlobalConfig::get_udp_broadcast_address() const
 void GlobalConfig::set_udp_broadcast_port(uint16_t port)
 {
     m_config.udp_broadcast_port = port;
-    //Not saved, configured at runtime, not persisted to EEPROM
-    //save();
+    // Not saved, configured at runtime, not persisted to EEPROM
+    // save();
 }
 
 uint16_t GlobalConfig::get_udp_broadcast_port() const
@@ -170,8 +170,8 @@ void GlobalConfig::setDefault()
     m_config.imu_sample_rate = m_imu_sampling_rate_ranges[0];
     m_config.adc_sample_rate = m_adc_sampling_rate_ranges[0];
     m_config.encoder_sample_rate = m_encoder_sampling_rate_ranges[0];
-    m_config.udp_broadcast_address = 0xFFFFFFFF; // Default to broadcast address
-    m_config.udp_broadcast_port = 12345; // Default port
+    m_config.udp_broadcast_address = 0xFFFFFFFF;  // Default to broadcast address
+    m_config.udp_broadcast_port = 12345;  // Default port
     save();
 }
 
@@ -212,8 +212,10 @@ bool GlobalConfig::validate()
         return false;
     }
 
-    if (std::find(m_encoder_sampling_rate_ranges.begin(), m_encoder_sampling_rate_ranges.end(),
-                  m_config.encoder_sample_rate) == m_encoder_sampling_rate_ranges.end())
+    if (std::find(
+            m_encoder_sampling_rate_ranges.begin(),
+            m_encoder_sampling_rate_ranges.end(),
+            m_config.encoder_sample_rate) == m_encoder_sampling_rate_ranges.end())
     {
         return false;
     }

@@ -83,7 +83,6 @@ private:
 
     // Workers
     SDCardWorkerTask m_sdCardWorkerTask;
-    // WebServerTask m_webServerTask;
     WebServerTask m_webServerTask;
 
     SemaphoreHandle_t m_queueMutex;

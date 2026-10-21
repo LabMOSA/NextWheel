@@ -33,7 +33,10 @@ void QuadEncoderSensorTask::run(void* app)
         encoder_timer,
         &NextWheelInterrupts::quad_encoder_sensor_task_timer_interrupt,
         false);  // Attach interrupt function
-    timerAlarmWrite(encoder_timer, 1000000 / GlobalConfig::instance().get_encoder_sample_rate(), true);  // us timer calculation
+    timerAlarmWrite(
+        encoder_timer,
+        1000000 / GlobalConfig::instance().get_encoder_sample_rate(),
+        true);  // us timer calculation
     timerAlarmEnable(encoder_timer);
 
 
@@ -77,8 +80,8 @@ void QuadEncoderSensorTask::run(void* app)
         // Reset counter
         // m_encoder.clearCount();
 
-        //Serial.print("encoder counts: ");
-        //Serial.println(count);
+        // Serial.print("encoder counts: ");
+        // Serial.println(count);
 
         // Update timestamp and value
         frame.setTimestamp(DataFrame::getCurrentTimeStamp());

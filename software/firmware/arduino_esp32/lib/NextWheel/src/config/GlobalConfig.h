@@ -62,11 +62,11 @@ public:
     uint32_t get_encoder_sample_rate() const;
 
     void set_udp_broadcast_address(uint32_t address);
-    
+
     uint32_t get_udp_broadcast_address() const;
-    
+
     void set_udp_broadcast_port(uint16_t port);
-    
+
     uint16_t get_udp_broadcast_port() const;
 
     void setDefault();

@@ -5,7 +5,7 @@
 #include <data/DataFrame.h>
 
 /**
- * Sends binary frames (same format as the WebSocket stream) to the UDP
+ * Sends binary frames (see "UDP Binary Message Format" in README) to the UDP
  * address / port stored in GlobalConfig. The destination is read from
  * GlobalConfig on every send so configuration changes apply immediately.
  */

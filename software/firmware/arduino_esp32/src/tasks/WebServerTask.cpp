@@ -7,18 +7,22 @@
 #include <state/SystemState.h>
 #include <cJSON.h>
 #include <SD_MMC.h>
+#include <esp_sntp.h>
 
+volatile bool WebServerTask::s_ntpSynced = false;
+volatile bool WebServerTask::s_ntpRTCUpdatePending = false;
+volatile time_t WebServerTask::s_ntpLastSyncTime = 0;
+volatile int64_t WebServerTask::s_ntpLastSyncTimerUs = 0;
 
-WebServerTask::WebServerTask()
-    : WorkerTask("WebServerTask", WEB_SERVER_STACK_SIZE),
-      m_webServer(80)
-{
-}
+WebServerTask::WebServerTask() : WorkerTask("WebServerTask", WEB_SERVER_STACK_SIZE), m_webServer(80) {}
 
 
 void WebServerTask::run(void* app)
 {
     Serial.printf("WebServerTask::run Priority: %li Core: %li \n", uxTaskPriorityGet(NULL), xPortGetCoreID());
+
+    // NTP will be started each time an IP address is obtained
+    setupNTP();
 
     WiFi.begin(WIFI_DEFAULT_SSID, WIFI_DEFAULT_PASSWORD);
     // put your setup code here, to run once:
@@ -39,6 +43,16 @@ void WebServerTask::run(void* app)
     {
         // Serial.println("WebServerTask::run: m_webServer.loop()");
         m_webServer.handleClient();
+
+        // Store NTP time in the RTC (done here to avoid I2C access from the lwIP task)
+        if (s_ntpRTCUpdatePending)
+        {
+            s_ntpRTCUpdatePending = false;
+            // With smooth sync, system time is still converging, use NTP time + elapsed time instead
+            int64_t elapsed_us = esp_timer_get_time() - s_ntpLastSyncTimerUs;
+            NextWheelApp::instance()->getRTC().adjustRTCTime(s_ntpLastSyncTime + elapsed_us / 1000000);
+            NextWheelApp::instance()->getRTC().printTime();
+        }
 
         // First empty the command queue (timeout=0, not waiting)
         // Loop while we have BASE_TASK_COMMAND_NONE --> 0
@@ -74,7 +88,7 @@ void WebServerTask::run(void* app)
             }
         }
 
-        // Then dequeue all data frames and send them to the websocket
+        // Then dequeue all data frames and send them as a UDP superframe
         size_t total_payload_size = 0;
         std::list<DataFramePtr> dataPtrs;
 
@@ -128,7 +142,8 @@ bool WebServerTask::startUDPStreaming(uint32_t address, uint16_t port)
 {
     if (m_udpStreamer.isStreaming())
     {
-        return false;
+        //return false;
+        stopUDPStreaming();
     }
 
     // Destination is stored in the config, UDPStreamer reads it when sending
@@ -140,9 +155,10 @@ bool WebServerTask::startUDPStreaming(uint32_t address, uint16_t port)
         return false;
     }
 
-    Serial.printf("UDP streaming to %s:%u\n",
-                  IPAddress(GlobalConfig::instance().get_udp_broadcast_address()).toString().c_str(),
-                  GlobalConfig::instance().get_udp_broadcast_port());
+    Serial.printf(
+        "UDP streaming to %s:%u\n",
+        IPAddress(GlobalConfig::instance().get_udp_broadcast_address()).toString().c_str(),
+        GlobalConfig::instance().get_udp_broadcast_port());
 
     SystemState::instance().getState().streaming = true;
     NextWheelApp::instance()->playStartStreamingSound();
@@ -169,6 +185,48 @@ bool WebServerTask::stopUDPStreaming()
     SystemState::instance().getState().streaming = false;
     NextWheelApp::instance()->playStopStreamingSound();
     return true;
+}
+
+void WebServerTask::setupNTP()
+{
+    WiFi.onEvent(
+        [this](arduino_event_id_t event, arduino_event_info_t info)
+        {
+            Serial.print("WebServerTask: Got IP: ");
+            Serial.println(IPAddress(info.got_ip.ip_info.ip.addr));
+            startNTP();
+        },
+        ARDUINO_EVENT_WIFI_STA_GOT_IP);
+}
+
+void WebServerTask::startNTP()
+{
+    // Restart SNTP if already running (IP changed / reconnected)
+    if (sntp_enabled())
+    {
+        sntp_stop();
+    }
+
+    // Not using configTime() since it overrides the TZ, make sure local time is Eastern
+    RTC::setTimeZone();
+
+    sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    // Gradual correction (adjtime) to avoid timestamp jumps while recording / streaming
+    // Note: error > 35 minutes (e.g. RTC never set) is still corrected immediately
+    sntp_set_sync_mode(SNTP_SYNC_MODE_SMOOTH);
+    sntp_setservername(0, NTP_DEFAULT_SERVER);
+    sntp_set_time_sync_notification_cb(&WebServerTask::onNTPTimeSync);
+    sntp_init();
+    Serial.printf("WebServerTask: NTP started with server %s\n", NTP_DEFAULT_SERVER);
+}
+
+void WebServerTask::onNTPTimeSync(struct timeval* tv)
+{
+    s_ntpLastSyncTime = tv->tv_sec;
+    s_ntpLastSyncTimerUs = esp_timer_get_time();
+    s_ntpSynced = true;
+    s_ntpRTCUpdatePending = true;
+    Serial.printf("WebServerTask: NTP time synchronized: %li\n", (long)tv->tv_sec);
 }
 
 void WebServerTask::setupRESTAPI()
@@ -231,6 +289,39 @@ void WebServerTask::setupRESTAPI()
         });
 
     m_webServer.on(
+        "/ntp_time",
+        HTTP_GET,
+        [this]()
+        {
+            Serial.println("get: /ntp_time");
+
+            struct timeval current_time;
+            gettimeofday(&current_time, NULL);
+
+            char iso_time[32];
+            strftime(iso_time, sizeof(iso_time), "%Y-%m-%dT%H:%M:%S%z", localtime(&current_time.tv_sec));
+
+            cJSON* root = cJSON_CreateObject();
+            cJSON_AddBoolToObject(root, "synced", s_ntpSynced);
+            cJSON_AddStringToObject(root, "server", NTP_DEFAULT_SERVER);
+            cJSON_AddNumberToObject(root, "time", (double)current_time.tv_sec + current_time.tv_usec / 1e6);
+            cJSON_AddStringToObject(root, "local_time", iso_time);
+            cJSON_AddNumberToObject(root, "last_sync", (double)s_ntpLastSyncTime);
+
+            // Remaining correction (seconds) being applied gradually, 0 when system time is in sync
+            struct timeval remaining = {0, 0};
+            adjtime(NULL, &remaining);
+            cJSON_AddNumberToObject(root, "adjusting", (double)remaining.tv_sec + remaining.tv_usec / 1e6);
+            String json(cJSON_Print(root));
+
+            // Free memory
+            cJSON_free(root);
+
+            Serial.println(json);
+            m_webServer.send(200, "application/json", json);
+        });
+
+    m_webServer.on(
         "/config_update",
         HTTP_POST,
         [this]()
@@ -246,6 +337,9 @@ void WebServerTask::setupRESTAPI()
                 GlobalConfig::instance().set_imu_sample_rate(m_webServer.arg("imu_sampling_rate").toInt());
                 GlobalConfig::instance().set_adc_sample_rate(m_webServer.arg("adc_sampling_rate").toInt());
                 GlobalConfig::instance().set_encoder_sample_rate(m_webServer.arg("encoder_sampling_rate").toInt());
+
+                // Apply the new configuration to all tasks (sensor rates, IMU ranges, CONFIG frame to SD card / UDP)
+                NextWheelApp::instance()->sendConfigUpdateEvent();
 
                 // Print current config
                 Serial.println("Current config:");

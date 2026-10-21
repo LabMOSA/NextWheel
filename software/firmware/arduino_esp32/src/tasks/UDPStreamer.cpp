@@ -60,8 +60,8 @@ bool UDPStreamer::send(const uint8_t* data, size_t size)
     dest.sin_addr.s_addr = GlobalConfig::instance().get_udp_broadcast_address();
 
     // Non blocking, if the WiFi stack is out of buffers, drop the packet
-    int sent = sendto(m_socket, data, size, MSG_DONTWAIT, (struct sockaddr*) &dest, sizeof(dest));
-    if (sent != (int) size)
+    int sent = sendto(m_socket, data, size, MSG_DONTWAIT, (struct sockaddr*)&dest, sizeof(dest));
+    if (sent != (int)size)
     {
         m_droppedPackets++;
         return false;

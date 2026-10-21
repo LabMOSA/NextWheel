@@ -1014,6 +1014,21 @@ class NextWheel:
         response = requests.get(f"http://{self.ip}:{self.port}/system_state")
         return json.loads(response.content)
 
+    def get_ntp_time(self) -> dict:
+        """
+        Get the NTP time status of the instrumented wheel.
+
+        Returns
+        -------
+        dict
+            A dictionary with keys synced, server, time (epoch seconds),
+            local_time (ISO 8601), last_sync (epoch seconds) and
+            adjusting (remaining gradual correction in seconds).
+
+        """
+        response = requests.get(f"http://{self.ip}:{self.port}/ntp_time")
+        return json.loads(response.content)
+
     def start_recording(self) -> None:
         """
         Start recording data on the instrumented wheel.
