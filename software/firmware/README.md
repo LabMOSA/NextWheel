@@ -196,12 +196,12 @@ Values are already converted on device. Size optimization of the binary stream w
 The system time is used to timestamp every data frame (UNIX microseconds) and to generate recording file names.
 
 * At boot, the system time is initialized from the [RTC](arduino_esp32/lib/NextWheel/src/RTC.cpp) (MCP7940M with battery backup). The RTC stores UTC time.
-* Each time an IP address is obtained (connection, reconnection or IP change), SNTP is (re)started by the [WebServerTask](arduino_esp32/src/tasks/WebServerTask.cpp).
-* Time is then resynchronized every 3 hours (Arduino-ESP32 default `CONFIG_LWIP_SNTP_UPDATE_DELAY`). The interval can be changed with `sntp_set_sync_interval()` (minimum 15 seconds).
+* When an IP address is obtained at startup, SNTP is started by the [WebServerTask](arduino_esp32/src/tasks/WebServerTask.cpp). If the connection is lost before the first synchronization, SNTP is restarted on reconnection.
+* After the first synchronization, SNTP is stopped. There is no periodic resynchronization, so the system time drifts until the next boot or until a resynchronization is requested with `/ntp_resync`. SNTP is stopped again after that synchronization.
 * Corrections are applied gradually (`SNTP_SYNC_MODE_SMOOTH`, using `adjtime`) to avoid timestamp jumps while recording or streaming. If the error is larger than 35 minutes (e.g. RTC never set), the time is set immediately.
 * After each synchronization, the NTP time is written back to the RTC so the next boot starts with a corrected time, even without WiFi.
 * The NTP server requires Internet access from the WiFi network. Without it, the system keeps running on RTC time.
-* `/config_set_time` still sets the time manually, but it will be overridden at the next NTP synchronization.
+* `/config_set_time` still sets the time manually, but it will be overridden by the startup NTP synchronization or by `/ntp_resync`.
 
 | **Define** | **Default** | **Description** |
 |------------|-------------|-----------------|
@@ -221,8 +221,9 @@ All endpoints are served on HTTP port 80. Text responses are `text/plain`, JSON 
 |**Url**   | **HTTP Method** |  **Param(s)**   | **Return** | **Description**   |
 |-----|-----------|----|-----------|---|
 / | GET | None | 200, "Hello from NextWheel REST API Server !" | Check that the server is running.
-/config_set_time | POST | time (int) unix timestamp in seconds | 200 (OK), 400 (Missing time argument) | Set the system time and the RTC from a unix timestamp. Overridden at the next NTP synchronization, see [Time Synchronization](#time-synchronization-ntp).
+/config_set_time | POST | time (int) unix timestamp in seconds | 200 (OK), 400 (Missing time argument) | Set the system time and the RTC from a unix timestamp. Overridden by the startup NTP synchronization or `/ntp_resync`, see [Time Synchronization](#time-synchronization-ntp).
 /ntp_time | GET | None | 200, JSON = {"synced": (bool) ntp_response_received, "server": (string) ntp_server, "time": (float) current_unix_time_seconds, "local_time": (string) ISO 8601 local time with UTC offset, "last_sync": (int) unix_time_of_last_sync, "adjusting": (float) remaining_gradual_correction_seconds} | Get the current time and NTP synchronization status. `adjusting` is 0 when the system time is fully synchronized.
+/ntp_resync | GET | None | 200 (OK), 400 (Not connected) | Restart SNTP for a single synchronization. It is stopped again once the time is received and written to the RTC. Check `last_sync` in `/ntp_time` to know when it is done.
 /config_update | POST | accelerometer_precision (int), gyrometer_precision (int), imu_sampling_rate (int), adc_sampling_rate (int), encoder_sampling_rate (int). All are required. | 200 (OK), 400 (Missing arguments) | Set and save the sensor configuration. It is applied immediately to all sensors, and a new CONFIG frame is written to the current recording and sent on the UDP stream.
 /config | GET | None | 200, JSON = {"accelerometer_precision": (int), "gyrometer_precision": (int), "imu_sampling_rate": (int), "adc_sampling_rate": (int), "encoder_sampling_rate": (int)} | Get the current sensor configuration.
 /system_state | GET | None | 200, JSON = {"recording": (int 0/1) recording_flag, "streaming": (int 0/1) streaming_flag, "filename": (string) recording_filename} | Get the current state of the system.
