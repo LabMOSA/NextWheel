@@ -31,6 +31,7 @@ protected:
     bool stopUDPStreaming();
     void setupNTP();
     void startNTP();
+    void stopNTP();
     static void onNTPTimeSync(struct timeval* tv);
 
     // Written from the SNTP callback (lwIP task), read from this task

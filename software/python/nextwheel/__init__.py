@@ -1029,6 +1029,20 @@ class NextWheel:
         response = requests.get(f"http://{self.ip}:{self.port}/ntp_time")
         return json.loads(response.content)
 
+    def resync_ntp(self) -> None:
+        """
+        Request a new NTP synchronization on the instrumented wheel.
+
+        NTP is stopped after the next synchronization. Use get_ntp_time()
+        to check when last_sync is updated.
+
+        Returns
+        -------
+        None
+
+        """
+        requests.get(f"http://{self.ip}:{self.port}/ntp_resync")
+
     def start_recording(self) -> None:
         """
         Start recording data on the instrumented wheel.

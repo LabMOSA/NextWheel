@@ -21,7 +21,7 @@ void WebServerTask::run(void* app)
 {
     Serial.printf("WebServerTask::run Priority: %li Core: %li \n", uxTaskPriorityGet(NULL), xPortGetCoreID());
 
-    // NTP will be started each time an IP address is obtained
+    // NTP will be started when an IP address is obtained, until the first sync
     setupNTP();
 
     WiFi.begin(WIFI_DEFAULT_SSID, WIFI_DEFAULT_PASSWORD);
@@ -48,6 +48,8 @@ void WebServerTask::run(void* app)
         if (s_ntpRTCUpdatePending)
         {
             s_ntpRTCUpdatePending = false;
+            // NTP is only needed once at startup, stop it here (not from the lwIP callback)
+            stopNTP();
             // With smooth sync, system time is still converging, use NTP time + elapsed time instead
             int64_t elapsed_us = esp_timer_get_time() - s_ntpLastSyncTimerUs;
             NextWheelApp::instance()->getRTC().adjustRTCTime(s_ntpLastSyncTime + elapsed_us / 1000000);
@@ -194,7 +196,11 @@ void WebServerTask::setupNTP()
         {
             Serial.print("WebServerTask: Got IP: ");
             Serial.println(IPAddress(info.got_ip.ip_info.ip.addr));
-            startNTP();
+            // Only sync once at startup, do not restart NTP on reconnect
+            if (!s_ntpSynced)
+            {
+                startNTP();
+            }
         },
         ARDUINO_EVENT_WIFI_STA_GOT_IP);
 }
@@ -218,6 +224,15 @@ void WebServerTask::startNTP()
     sntp_set_time_sync_notification_cb(&WebServerTask::onNTPTimeSync);
     sntp_init();
     Serial.printf("WebServerTask: NTP started with server %s\n", NTP_DEFAULT_SERVER);
+}
+
+void WebServerTask::stopNTP()
+{
+    if (sntp_enabled())
+    {
+        sntp_stop();
+        Serial.println("WebServerTask: NTP stopped");
+    }
 }
 
 void WebServerTask::onNTPTimeSync(struct timeval* tv)
@@ -319,6 +334,22 @@ void WebServerTask::setupRESTAPI()
 
             Serial.println(json);
             m_webServer.send(200, "application/json", json);
+        });
+
+    m_webServer.on(
+        "/ntp_resync",
+        HTTP_GET,
+        [this]()
+        {
+            Serial.println("get: /ntp_resync");
+            if (WiFi.status() != WL_CONNECTED)
+            {
+                m_webServer.send(400, "text/plain", "Not connected");
+                return;
+            }
+            // NTP will be stopped again after the next synchronization
+            startNTP();
+            m_webServer.send(200, "text/plain", "OK");
         });
 
     m_webServer.on(
