@@ -535,6 +535,7 @@ class NextWheel:
         self,
         address: str = "255.255.255.255",
         port: int = DEFAULT_UDP_PORT,
+        *,
         max_imu_samples: int = 1000,
         max_analog_samples: int = 1000,
         max_encoder_samples: int = 100,
