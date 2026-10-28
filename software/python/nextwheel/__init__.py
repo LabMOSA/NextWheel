@@ -613,7 +613,7 @@ class NextWheel:
         # is fine.
         response = requests.get(
             f"http://{self.ip}:{self.port}/start_streaming",
-            params={"address": address, "port": port},
+            params={"address": address, "port": str(port)},
         )
         already_streaming = (
             response.status_code == HTTP_RESPONSE_CODE_BAD_REQUEST
