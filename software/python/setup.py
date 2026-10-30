@@ -13,7 +13,7 @@ setuptools.setup(
     description="Python module for NextWheel instrumented wheels",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/felixchenier/NextWheel",
+    url="https://github.com/LabMOSA/NextWheel",
     author="NextWheel collaborators",
     author_email="chenier.felix@uqam.ca",
     license="Apache",
@@ -23,9 +23,9 @@ setuptools.setup(
         "nextwheel": [],
     },
     project_urls={
-        "Documentation": "https://github.com/felixchenier/NextWheel/tree/master/python",
-        "Source": "https://github.com/felixchenier/NextWheel",
-        "Tracker": "https://github.com/felixchenier/NextWheel/issues",
+        "Documentation": "https://github.com/LabMOSA/NextWheel/tree/master/python",
+        "Source": "https://github.com/LabMOSA/NextWheel",
+        "Tracker": "https://github.com/LabMOSA/NextWheel/issues",
     },
     install_requires=["numpy", "matplotlib", "requests"],
     classifiers=[
