@@ -16,6 +16,7 @@
 
 import json
 import os
+import socket
 import struct
 import threading
 from enum import IntEnum
@@ -24,7 +25,6 @@ from typing import Any
 
 import numpy as np
 import requests
-import websocket
 from requests.exceptions import ConnectTimeout
 
 try:
@@ -56,11 +56,15 @@ except ModuleNotFoundError:
 GRAVITY = 9.80665
 STANDARD_MAG_RANGE = 2500
 HTTP_RESPONSE_CODE_OK = 200
+HTTP_RESPONSE_CODE_BAD_REQUEST = 400
+DEFAULT_UDP_PORT = 12345
+UDP_RECEIVE_BUFFER_SIZE = 65535
+UDP_SOCKET_TIMEOUT = 0.2  # s, delay to notice that streaming was stopped
 ENCODER_RESOLUTION = 0.087890625 / 180 * np.pi  # rad per tick
 
 
 class FrameType(IntEnum):
-    """Identify frame type from websocket message."""
+    """Identify frame type from a UDP datagram or a dat file."""
 
     CONFIG = 1
     ADC = 2
@@ -230,12 +234,18 @@ class NextWheel:
     Communicate with the instrumented wheel.
 
     The class permit to communicate with the instrumented wheel with 3 methods:
-        - NextWheel.connect() allows to start a connection with the server via
-        the WebSocketApp.
+        - NextWheel.start_streaming() asks the wheel to stream its data over
+        UDP and starts receiving it in a background thread.
         - NextWheel.fetch() return the streamed data in a nested dictionary
-        with all the usefull informations. Also clear the buffer.
-        - NextWheel.close() close the connection with the instrumented wheel.
+        with all the usefull informations.
+        - NextWheel.stop_streaming() stops the stream.
     It needs an IP address like in the example below.
+
+    The wheel sends its data to the UDP address and port given to
+    NextWheel.start_streaming() (by default, broadcast 255.255.255.255 on
+    port 12345). Use a different port for each wheel to reduce network load
+    on each receiver. The local firewall must accept incoming UDP datagrams
+    on this port.
 
     Raises
     ------
@@ -247,10 +257,11 @@ class NextWheel:
     -------
     >>> from nextwheel import NextWheel
     >>> nw = NextWheel("196.168.1.254")
+    >>> nw.start_streaming()
 
     >>> print(nw.fetch())
 
-    >>> nw.close()
+    >>> nw.stop_streaming()
 
     """
 
@@ -258,6 +269,7 @@ class NextWheel:
         self,
         ip: str = "",
         *,
+        port: int = 80,
         debug: bool = False,
     ):
         # General configuration
@@ -271,9 +283,12 @@ class NextWheel:
         self.calibration_matrix: np.ndarray = np.eye(6)
         self.calibration_offset: np.ndarray = np.zeros(6)
 
-        # Communication stuff
+        # Communication stuff (port must be set before ip, which connects)
+        self.port = port
         self.ip = ip
-        self.ws: None | websocket.WebSocketApp = None
+        self._udp_socket: None | socket.socket = None
+        self._udp_thread: None | threading.Thread = None
+        self._stop_event = threading.Event()
         self._mutex = threading.Lock()
         self._thread_is_running = False
 
@@ -452,42 +467,75 @@ class NextWheel:
 
         raise ValueError(f"Received an unknown frame type: {frame_type}")
 
-    def _on_message(self, ws: websocket.WebSocketApp, message: bytes) -> None:
+    def _parse_datagram(self, datagram: bytes) -> None:
         """
-        React to WebSocketApp message received.
-
-        Simply a wrapper to the more generic _parse_messages function.
+        Parse all messages contained in a received UDP datagram.
 
         Parameters
         ----------
-        ws
-            Unused.
-        message
+        datagram
             Information containing data in bytes.
 
         """
-        if self._debug:
-            print("Received data: ", ws)
+        offset = 0
         with self._mutex:
-            self._parse_message(message)
+            while (
+                new_offset := self._parse_message(datagram, offset)
+            ) > offset:
+                offset = new_offset
 
-    def _on_open(self, ws):
-        """Reaction of the WebSocketApp when the connection is open."""
-        if self._debug:
-            print("Connected: ", ws)
+    def _receive_loop(self, udp_socket: socket.socket, wheel_ip: str) -> None:
+        """
+        Receive UDP datagrams from the wheel until streaming is stopped.
 
-    def _on_error(self, ws, error):
-        """Reaction of the WebSocketApp when there is an error."""
-        print(ws, error)
-        self.stop_streaming()
+        Parameters
+        ----------
+        udp_socket
+            Bound UDP socket with a timeout.
+        wheel_ip
+            Datagrams not coming from this address (e.g., from another wheel
+            broadcasting on the same port) are ignored.
 
-    def _on_close(self, ws, close_status_code, close_msg):
-        """Reaction of the WebSocketApp when the connection is close."""
-        if self._debug:
-            print("Closed: ", ws, close_status_code, close_msg)
+        """
+        while not self._stop_event.is_set():
+            try:
+                datagram, (sender_ip, _) = udp_socket.recvfrom(
+                    UDP_RECEIVE_BUFFER_SIZE
+                )
+            except TimeoutError:
+                continue
+            except OSError:
+                # Socket closed by stop_streaming
+                break
 
-    def start_streaming(
+            if sender_ip != wheel_ip:
+                continue
+
+            if self._debug:
+                print(f"Received {len(datagram)} bytes from {sender_ip}")
+
+            try:
+                self._parse_datagram(datagram)
+            except (ValueError, struct.error) as e:
+                # A corrupted datagram should not stop the stream
+                print("Invalid datagram received: ", e)
+
+    def _update_config_from_params(self, params: dict) -> None:
+        """Update the conversion configuration from get_sensors_params()."""
+        with self._mutex:
+            self._config.accel_range = params["accelerometer_precision"]
+            self._config.gyro_range = params["gyrometer_precision"]
+            self._config.imu_sampling_rate = params["imu_sampling_rate"]
+            self._config.adc_sampling_rate = params["adc_sampling_rate"]
+            self._config.encoder_sampling_rate = params[
+                "encoder_sampling_rate"
+            ]
+
+    def start_streaming(  # noqa: PLR0913
         self,
+        address: str = "255.255.255.255",
+        port: int = DEFAULT_UDP_PORT,
+        *,
         max_imu_samples: int = 1000,
         max_analog_samples: int = 1000,
         max_encoder_samples: int = 100,
@@ -498,6 +546,13 @@ class NextWheel:
 
         Parameters
         ----------
+        address : str, optional
+            IP address (x.x.x.x) where the wheel sends the streamed data. The
+            default 255.255.255.255 broadcasts to the whole local network.
+            Using the IP address of this computer avoids broadcasting.
+        port : int, optional
+            UDP port where the wheel sends the streamed data, and where this
+            computer listens. The default is 12345.
         max_imu_samples : int, optional
             Maximum IMU data to keep in memory. The default is 1000.
         max_analog_samples : int, optional
@@ -520,49 +575,98 @@ class NextWheel:
         self.max_encoder_samples = max_encoder_samples
         self.max_power_samples = max_power_samples
 
-        self.ws = websocket.WebSocketApp(
-            f"ws://{self.ip}:81/",
-            on_open=self._on_open,
-            on_message=self._on_message,
-            on_error=self._on_error,
-            on_close=self._on_close,
-        )
+        # The config frame is only sent when streaming starts, which may have
+        # been done by another client. Get the current config from the REST
+        # API so that the data can be converted in any case.
+        params = self.get_sensors_params()
+        self._update_config_from_params(params)
 
-        t = threading.Thread(target=self.ws.run_forever)  # type: ignore
-        t.start()
+        udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        if hasattr(socket, "SO_REUSEPORT"):
+            # Allows several NextWheel instances to receive broadcasts on the
+            # same port.
+            udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+        udp_socket.bind(("", port))
+        udp_socket.settimeout(UDP_SOCKET_TIMEOUT)
+        self._udp_socket = udp_socket
+
+        self._stop_event.clear()
+        self._udp_thread = threading.Thread(
+            target=self._receive_loop,
+            args=(udp_socket, socket.gethostbyname(self.ip)),
+            daemon=True,
+        )
+        self._udp_thread.start()
         self._thread_is_running = True
+
+        if self._debug:
+            print(
+                "Listening on UDP port",
+                port,
+                "for data sent to",
+                address,
+            )
+
+        # Ask the wheel to start streaming. "Already streaming" means that
+        # another client started it (possibly to another destination), which
+        # is fine.
+        response = requests.get(
+            f"http://{self.ip}:{self.port}/start_streaming",
+            params={"address": address, "port": str(port)},
+        )
+        already_streaming = (
+            response.status_code == HTTP_RESPONSE_CODE_BAD_REQUEST
+            and "Already streaming" in response.text
+        )
+        if (
+            response.status_code != HTTP_RESPONSE_CODE_OK
+            and not already_streaming
+        ):
+            self.stop_streaming()
+            raise RuntimeError(
+                f"Could not start streaming: {response.status_code} "
+                f"{response.text}"
+            )
 
     def stop_streaming(self):
         """
-        Stop streaming via websocket.
+        Stop streaming.
 
         Returns
         -------
         None.
 
         """
-        self.ws.close()
-        self._thread_is_running = False
-        try:
-            # If something has crashed somewhere, release the mutex for the
-            # next connection.
-            self._mutex.release()
-        except RuntimeError:
-            # No mutex was locked. That's fine.
-            pass
+        if not self._thread_is_running:
+            return
 
-    def monitor(self) -> None:
+        try:
+            requests.get(f"http://{self.ip}:{self.port}/stop_streaming")
+        finally:
+            self._stop_event.set()
+            if self._udp_thread is not None:
+                self._udp_thread.join()
+                self._udp_thread = None
+            if self._udp_socket is not None:
+                self._udp_socket.close()
+                self._udp_socket = None
+            self._thread_is_running = False
+
+    def monitor(
+        self, address: str = "255.255.255.255", port: int = DEFAULT_UDP_PORT
+    ) -> None:
         """
         Blocking function that monitors the sensors measurements.
 
         This function shows the current sensor states in a simple GUI
         for testing and monitoring. To log data, use NextWheel.fetch()
-        instead.
+        instead. See start_streaming() for address and port.
         """
         # Don't import until needed.
         import nextwheel.monitor as nwm  # noqa
 
-        self.start_streaming()
+        self.start_streaming(address, port)
         nwm.monitor(self)
         self.stop_streaming()
 
@@ -836,10 +940,11 @@ class NextWheel:
 
         """
         requests.post(
-            f"http://{self.ip}/config_set_time", params={"time": unix_time}
+            f"http://{self.ip}:{self.port}/config_set_time",
+            params={"time": unix_time},
         )
 
-    def set_sensors_params(
+    def set_sensors_params(  # noqa: PLR0913
         self,
         adc_sampling_rate: int,
         imu_sampling_rate: int,
@@ -871,15 +976,16 @@ class NextWheel:
         requests.Response
 
         """
+        params = {
+            "adc_sampling_rate": adc_sampling_rate,
+            "imu_sampling_rate": imu_sampling_rate,
+            "encoder_sampling_rate": encoder_sampling_rate,
+            "accelerometer_precision": accelerometer_precision,
+            "gyrometer_precision": gyrometer_precision,
+        }
+
         response = requests.post(
-            f"http://{self.ip}/config_update",
-            params={
-                "adc_sampling_rate": adc_sampling_rate,
-                "imu_sampling_rate": imu_sampling_rate,
-                "encoder_sampling_rate": encoder_sampling_rate,
-                "accelerometer_precision": accelerometer_precision,
-                "gyrometer_precision": gyrometer_precision,
-            },
+            f"http://{self.ip}:{self.port}/config_update", params=params
         )
         return response
 
@@ -893,7 +999,7 @@ class NextWheel:
             A dictionary in the form parameter:value.
 
         """
-        response = requests.get(f"http://{self.ip}/config")
+        response = requests.get(f"http://{self.ip}:{self.port}/config")
         return json.loads(response.content)
 
     def get_system_state(self) -> dict:
@@ -906,8 +1012,37 @@ class NextWheel:
             A dictionary in the form parameter:value
 
         """
-        response = requests.get(f"http://{self.ip}/system_state")
+        response = requests.get(f"http://{self.ip}:{self.port}/system_state")
         return json.loads(response.content)
+
+    def get_ntp_time(self) -> dict:
+        """
+        Get the NTP time status of the instrumented wheel.
+
+        Returns
+        -------
+        dict
+            A dictionary with keys synced, server, time (epoch seconds),
+            local_time (ISO 8601), last_sync (epoch seconds) and
+            adjusting (remaining gradual correction in seconds).
+
+        """
+        response = requests.get(f"http://{self.ip}:{self.port}/ntp_time")
+        return json.loads(response.content)
+
+    def resync_ntp(self) -> None:
+        """
+        Request a new NTP synchronization on the instrumented wheel.
+
+        NTP is stopped after the next synchronization. Use get_ntp_time()
+        to check when last_sync is updated.
+
+        Returns
+        -------
+        None
+
+        """
+        requests.get(f"http://{self.ip}:{self.port}/ntp_resync")
 
     def start_recording(self) -> None:
         """
@@ -918,7 +1053,7 @@ class NextWheel:
         None
 
         """
-        requests.get(f"http://{self.ip}/start_recording")
+        requests.get(f"http://{self.ip}:{self.port}/start_recording")
 
     def stop_recording(self) -> None:
         """
@@ -929,7 +1064,7 @@ class NextWheel:
         None
 
         """
-        requests.get(f"http://{self.ip}/stop_recording")
+        requests.get(f"http://{self.ip}:{self.port}/stop_recording")
 
     def file_list(self) -> dict:
         """
@@ -940,7 +1075,7 @@ class NextWheel:
         dict
 
         """
-        response = requests.get(f"http://{self.ip}/file_list")
+        response = requests.get(f"http://{self.ip}:{self.port}/file_list")
         return json.loads(response.content)
 
     def file_download(self, filename: str, save_path: str = ".") -> int:
@@ -963,7 +1098,9 @@ class NextWheel:
         """
         param = {"file": filename}
         response = requests.get(
-            f"http://{self.ip}/file_download", params=param, stream=True
+            f"http://{self.ip}:{self.port}/file_download",
+            params=param,
+            stream=True,
         )
         if response.status_code == HTTP_RESPONSE_CODE_OK:
             with open(os.path.join(save_path, filename), "wb") as f:
@@ -989,7 +1126,8 @@ class NextWheel:
 
         """
         requests.get(
-            f"http://{self.ip}/file_delete", params={"file": filename}
+            f"http://{self.ip}:{self.port}/file_delete",
+            params={"file": filename},
         )
 
 

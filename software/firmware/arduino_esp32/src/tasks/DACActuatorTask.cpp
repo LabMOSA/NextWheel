@@ -147,7 +147,7 @@ void DACActuatorTask::run(void*)
         // DAC will only use the MSB
         //  Right channel
         stereo_buffer[0] = 0;
-        stereo_buffer[1] = (sample)&0xFF;
+        stereo_buffer[1] = (sample) & 0xFF;
 
         // Left channel
         // stereo_buffer[2] = 0;

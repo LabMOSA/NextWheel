@@ -4,7 +4,7 @@
 /*
     NextWheel  - Global definitions and macros
 */
-#define NEXT_WHEEL_VERSION     "0.1.0"
+#define NEXT_WHEEL_VERSION     "0.2"
 #define NEXT_WHEEL_DEBUG_LEVEL 0
 
 

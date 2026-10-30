@@ -12,7 +12,7 @@
 #include "tasks/ADCSensorTask.h"
 #include "tasks/IMUSensorTask.h"
 #include "tasks/PowerSensorTask.h"
-#include "tasks/WebSocketServerTask.h"
+#include "tasks/WebServerTask.h"
 #include "tasks/SDCardWorkerTask.h"
 #include "tasks/DACActuatorTask.h"
 #include "tasks/QuadEncoderSensorTask.h"
@@ -46,8 +46,8 @@ public:
 
     void registerSensorTasksToSDCardWorker();
     void unregisterSensorTasksFromSDCardWorker();
-    void registerSensorTasksToWebSocketServer();
-    void unregisterSensorTasksFromWebSocketServer();
+    void registerSensorTasksToWebServer();
+    void unregisterSensorTasksFromWebServer();
 
     bool button1Pressed();
     bool button2Pressed();
@@ -83,8 +83,7 @@ private:
 
     // Workers
     SDCardWorkerTask m_sdCardWorkerTask;
-    // WebSocketServerTask m_webSocketServerTask;
-    WebSocketServerTask m_webSocketServerTask;
+    WebServerTask m_webServerTask;
 
     SemaphoreHandle_t m_queueMutex;
 };

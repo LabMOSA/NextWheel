@@ -1,4 +1,4 @@
-#include "WebSocketServerTask.h"
+#include "WebServerTask.h"
 #include "config/GlobalConfig.h"
 #include "NextWheelApp.h"
 #include <esp_task_wdt.h>
@@ -7,19 +7,22 @@
 #include <state/SystemState.h>
 #include <cJSON.h>
 #include <SD_MMC.h>
+#include <esp_sntp.h>
+
+volatile bool WebServerTask::s_ntpSynced = false;
+volatile bool WebServerTask::s_ntpRTCUpdatePending = false;
+volatile time_t WebServerTask::s_ntpLastSyncTime = 0;
+volatile int64_t WebServerTask::s_ntpLastSyncTimerUs = 0;
+
+WebServerTask::WebServerTask() : WorkerTask("WebServerTask", WEB_SERVER_STACK_SIZE), m_webServer(80) {}
 
 
-WebSocketServerTask::WebSocketServerTask()
-    : WorkerTask("WebSocketServerTask", WEBSOCKET_SERVER_STACK_SIZE),
-      m_webSocketServer(81),
-      m_webServer(80)
+void WebServerTask::run(void* app)
 {
-}
+    Serial.printf("WebServerTask::run Priority: %li Core: %li \n", uxTaskPriorityGet(NULL), xPortGetCoreID());
 
-
-void WebSocketServerTask::run(void* app)
-{
-    Serial.printf("WebSocketServerTask::run Priority: %li Core: %li \n", uxTaskPriorityGet(NULL), xPortGetCoreID());
+    // NTP will be started when an IP address is obtained, until the first sync
+    setupNTP();
 
     WiFi.begin(WIFI_DEFAULT_SSID, WIFI_DEFAULT_PASSWORD);
     // put your setup code here, to run once:
@@ -33,18 +36,25 @@ void WebSocketServerTask::run(void* app)
 
     TickType_t lastGeneration = xTaskGetTickCount();
 
-    m_webSocketServer.begin();
-    m_webSocketServer.onEvent([this](uint8_t num, WStype_t type, uint8_t* payload, size_t length)
-                              { this->webSocketEvent(num, type, payload, length); });
-
     setupRESTAPI();
     m_webServer.begin();
 
     while (1)
     {
-        // Serial.println("WebSocketServerTask::run: m_webSocketServer.loop()");
-        m_webSocketServer.loop();
+        // Serial.println("WebServerTask::run: m_webServer.loop()");
         m_webServer.handleClient();
+
+        // Store NTP time in the RTC (done here to avoid I2C access from the lwIP task)
+        if (s_ntpRTCUpdatePending)
+        {
+            s_ntpRTCUpdatePending = false;
+            // NTP is only needed once at startup, stop it here (not from the lwIP callback)
+            stopNTP();
+            // With smooth sync, system time is still converging, use NTP time + elapsed time instead
+            int64_t elapsed_us = esp_timer_get_time() - s_ntpLastSyncTimerUs;
+            NextWheelApp::instance()->getRTC().adjustRTCTime(s_ntpLastSyncTime + elapsed_us / 1000000);
+            NextWheelApp::instance()->getRTC().printTime();
+        }
 
         // First empty the command queue (timeout=0, not waiting)
         // Loop while we have BASE_TASK_COMMAND_NONE --> 0
@@ -53,20 +63,17 @@ void WebSocketServerTask::run(void* app)
             switch (command)
             {
                 case Task::BASE_TASK_COMMAND_NONE:
-                    Serial.println("WebSocketServerTask::run: BASE_TASK_COMMAND_NONE");
+                    Serial.println("WebServerTask::run: BASE_TASK_COMMAND_NONE");
                     break;
                 case Task::BASE_TASK_CONFIG_UPDATED:
                 {
-                    Serial.println("WebSocketServerTask::run: BASE_TASK_CONFIG_UPDATED");
+                    Serial.println("WebServerTask::run: BASE_TASK_CONFIG_UPDATED");
 
                     // We should update the configuration info from now
                     ConfigDataFrame configDataFrame(GlobalConfig::instance().get());
-                    for (auto id = 0; id < m_webSocketServer.connectedClients(); id++)
-                    {
-                        uint8_t config_data[configDataFrame.getTotalSize()];
-                        configDataFrame.serialize(config_data, configDataFrame.getTotalSize());
-                        m_webSocketServer.sendBIN(id, config_data, configDataFrame.getTotalSize());
-                    }
+
+                    // Send to UDP destination (does nothing if not streaming)
+                    m_udpStreamer.sendFrame(configDataFrame);
 
                     // Empty the queue (with old config!)
                     while (DataFramePtr dataPtr = dequeue(0))
@@ -77,13 +84,13 @@ void WebSocketServerTask::run(void* app)
                 break;
 
                 default:
-                    Serial.print("WebSocketServerTask::run: Unknown command: ");
+                    Serial.print("WebServerTask::run: Unknown command: ");
                     Serial.println(command);
                     break;
             }
         }
 
-        // Then dequeue all data frames and send them to the websocket
+        // Then dequeue all data frames and send them as a UDP superframe
         size_t total_payload_size = 0;
         std::list<DataFramePtr> dataPtrs;
 
@@ -122,67 +129,127 @@ void WebSocketServerTask::run(void* app)
                 delete dataPtr;
             }
 
-            // Send to all websockets
-            for (auto id = 0; id < m_webSocketServer.connectedClients(); id++)
-            {
-                m_webSocketServer.sendBIN(id, super_frame, total_payload_size + DataFrame::HEADER_SIZE);
-            }
+            // Send to UDP destination (does nothing if not streaming)
+            m_udpStreamer.send(super_frame, total_payload_size + DataFrame::HEADER_SIZE);
         }
     }  // while(1)
 }
 
-bool WebSocketServerTask::isWebSocketConnected()
+bool WebServerTask::isUDPStreaming()
 {
-    return m_webSocketServer.connectedClients() > 0;
+    return m_udpStreamer.isStreaming();
 }
 
-void WebSocketServerTask::webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length)
+bool WebServerTask::startUDPStreaming(uint32_t address, uint16_t port)
 {
-    switch (type)
+    if (m_udpStreamer.isStreaming())
     {
-        case WStype_DISCONNECTED:
-            Serial.printf("[%u] Disconnected!\n", num);
-            SystemState::instance().getState().streaming = false;
-            NextWheelApp::instance()->playStopStreamingSound();
-            NextWheelApp::instance()->unregisterSensorTasksFromWebSocketServer();
-            break;
-        case WStype_CONNECTED:
+        //return false;
+        stopUDPStreaming();
+    }
+
+    // Destination is stored in the config, UDPStreamer reads it when sending
+    GlobalConfig::instance().set_udp_broadcast_address(address);
+    GlobalConfig::instance().set_udp_broadcast_port(port);
+
+    if (!m_udpStreamer.start())
+    {
+        return false;
+    }
+
+    Serial.printf(
+        "UDP streaming to %s:%u\n",
+        IPAddress(GlobalConfig::instance().get_udp_broadcast_address()).toString().c_str(),
+        GlobalConfig::instance().get_udp_broadcast_port());
+
+    SystemState::instance().getState().streaming = true;
+    NextWheelApp::instance()->playStartStreamingSound();
+
+    // Send the current configuration first, clients need it to decode data frames
+    ConfigDataFrame configDataFrame(GlobalConfig::instance().get());
+    m_udpStreamer.sendFrame(configDataFrame);
+
+    NextWheelApp::instance()->registerSensorTasksToWebServer();
+    return true;
+}
+
+bool WebServerTask::stopUDPStreaming()
+{
+    if (!m_udpStreamer.isStreaming())
+    {
+        return false;
+    }
+
+    NextWheelApp::instance()->unregisterSensorTasksFromWebServer();
+    Serial.printf("UDP streaming stopped, dropped packets: %u\n", m_udpStreamer.getDroppedPackets());
+    m_udpStreamer.stop();
+
+    SystemState::instance().getState().streaming = false;
+    NextWheelApp::instance()->playStopStreamingSound();
+    return true;
+}
+
+void WebServerTask::setupNTP()
+{
+    WiFi.onEvent(
+        [this](arduino_event_id_t event, arduino_event_info_t info)
         {
-            IPAddress ip = m_webSocketServer.remoteIP(num);
-            Serial.printf("[%u] Connected from %d.%d.%d.%d url: %s\n", num, ip[0], ip[1], ip[2], ip[3], payload);
-            SystemState::instance().getState().streaming = true;
-            NextWheelApp::instance()->playStartStreamingSound();
+            Serial.print("WebServerTask: Got IP: ");
+            Serial.println(IPAddress(info.got_ip.ip_info.ip.addr));
+            // Only sync once at startup, do not restart NTP on reconnect
+            if (!s_ntpSynced)
+            {
+                startNTP();
+            }
+        },
+        ARDUINO_EVENT_WIFI_STA_GOT_IP);
+}
 
-            // Send the current configuration
-            ConfigDataFrame configDataFrame(GlobalConfig::instance().get());
-            uint8_t config_data[configDataFrame.getTotalSize()];
-            configDataFrame.serialize(config_data, configDataFrame.getTotalSize());
-            m_webSocketServer.sendBIN(num, config_data, configDataFrame.getTotalSize());
+void WebServerTask::startNTP()
+{
+    // Restart SNTP if already running (IP changed / reconnected)
+    if (sntp_enabled())
+    {
+        sntp_stop();
+    }
 
-            NextWheelApp::instance()->registerSensorTasksToWebSocketServer();
-        }
-        break;
-        case WStype_TEXT:
-            Serial.printf("[%u] get Text: %s\n", num, payload);
-            break;
-        case WStype_BIN:
-            Serial.printf("[%u] get binary length: %u\n", num, length);
-            break;
-        case WStype_ERROR:
-        case WStype_FRAGMENT_TEXT_START:
-        case WStype_FRAGMENT_BIN_START:
-        case WStype_FRAGMENT:
-        case WStype_FRAGMENT_FIN:
-            break;
+    // Not using configTime() since it overrides the TZ, make sure local time is Eastern
+    RTC::setTimeZone();
+
+    sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    // Gradual correction (adjtime) to avoid timestamp jumps while recording / streaming
+    // Note: error > 35 minutes (e.g. RTC never set) is still corrected immediately
+    sntp_set_sync_mode(SNTP_SYNC_MODE_SMOOTH);
+    sntp_setservername(0, NTP_DEFAULT_SERVER);
+    sntp_set_time_sync_notification_cb(&WebServerTask::onNTPTimeSync);
+    sntp_init();
+    Serial.printf("WebServerTask: NTP started with server %s\n", NTP_DEFAULT_SERVER);
+}
+
+void WebServerTask::stopNTP()
+{
+    if (sntp_enabled())
+    {
+        sntp_stop();
+        Serial.println("WebServerTask: NTP stopped");
     }
 }
 
-void WebSocketServerTask::setupRESTAPI()
+void WebServerTask::onNTPTimeSync(struct timeval* tv)
+{
+    s_ntpLastSyncTime = tv->tv_sec;
+    s_ntpLastSyncTimerUs = esp_timer_get_time();
+    s_ntpSynced = true;
+    s_ntpRTCUpdatePending = true;
+    Serial.printf("WebServerTask: NTP time synchronized: %li\n", (long)tv->tv_sec);
+}
+
+void WebServerTask::setupRESTAPI()
 {
     m_webServer.onNotFound(
         [this]()
         {
-            Serial.println("WebSocketServerTask::setupRESTAPI: onNotFound");
+            Serial.println("WebServerTask::setupRESTAPI: onNotFound");
             String message = "Not Found\n\n";
             message += "URI: ";
             message += m_webServer.uri();
@@ -204,7 +271,7 @@ void WebSocketServerTask::setupRESTAPI()
         HTTP_GET,
         [this]()
         {
-            Serial.println("WebSocketServerTask::setupRESTAPI: /");
+            Serial.println("WebServerTask::setupRESTAPI: /");
             String message = "Hello from NextWheel REST API Server !";
             m_webServer.send(200, "text/plain", message);
         });
@@ -237,6 +304,55 @@ void WebSocketServerTask::setupRESTAPI()
         });
 
     m_webServer.on(
+        "/ntp_time",
+        HTTP_GET,
+        [this]()
+        {
+            Serial.println("get: /ntp_time");
+
+            struct timeval current_time;
+            gettimeofday(&current_time, NULL);
+
+            char iso_time[32];
+            strftime(iso_time, sizeof(iso_time), "%Y-%m-%dT%H:%M:%S%z", localtime(&current_time.tv_sec));
+
+            cJSON* root = cJSON_CreateObject();
+            cJSON_AddBoolToObject(root, "synced", s_ntpSynced);
+            cJSON_AddStringToObject(root, "server", NTP_DEFAULT_SERVER);
+            cJSON_AddNumberToObject(root, "time", (double)current_time.tv_sec + current_time.tv_usec / 1e6);
+            cJSON_AddStringToObject(root, "local_time", iso_time);
+            cJSON_AddNumberToObject(root, "last_sync", (double)s_ntpLastSyncTime);
+
+            // Remaining correction (seconds) being applied gradually, 0 when system time is in sync
+            struct timeval remaining = {0, 0};
+            adjtime(NULL, &remaining);
+            cJSON_AddNumberToObject(root, "adjusting", (double)remaining.tv_sec + remaining.tv_usec / 1e6);
+            String json(cJSON_Print(root));
+
+            // Free memory
+            cJSON_free(root);
+
+            Serial.println(json);
+            m_webServer.send(200, "application/json", json);
+        });
+
+    m_webServer.on(
+        "/ntp_resync",
+        HTTP_GET,
+        [this]()
+        {
+            Serial.println("get: /ntp_resync");
+            if (WiFi.status() != WL_CONNECTED)
+            {
+                m_webServer.send(400, "text/plain", "Not connected");
+                return;
+            }
+            // NTP will be stopped again after the next synchronization
+            startNTP();
+            m_webServer.send(200, "text/plain", "OK");
+        });
+
+    m_webServer.on(
         "/config_update",
         HTTP_POST,
         [this]()
@@ -252,6 +368,9 @@ void WebSocketServerTask::setupRESTAPI()
                 GlobalConfig::instance().set_imu_sample_rate(m_webServer.arg("imu_sampling_rate").toInt());
                 GlobalConfig::instance().set_adc_sample_rate(m_webServer.arg("adc_sampling_rate").toInt());
                 GlobalConfig::instance().set_encoder_sample_rate(m_webServer.arg("encoder_sampling_rate").toInt());
+
+                // Apply the new configuration to all tasks (sensor rates, IMU ranges, CONFIG frame to SD card / UDP)
+                NextWheelApp::instance()->sendConfigUpdateEvent();
 
                 // Print current config
                 Serial.println("Current config:");
@@ -287,6 +406,12 @@ void WebSocketServerTask::setupRESTAPI()
             cJSON_AddNumberToObject(root, "imu_sampling_rate", GlobalConfig::instance().get_imu_sample_rate());
             cJSON_AddNumberToObject(root, "adc_sampling_rate", GlobalConfig::instance().get_adc_sample_rate());
             cJSON_AddNumberToObject(root, "encoder_sampling_rate", GlobalConfig::instance().get_encoder_sample_rate());
+            /*
+            cJSON_AddStringToObject(
+                root, "udp_broadcast_address",
+                IPAddress(GlobalConfig::instance().get_udp_broadcast_address()).toString().c_str());
+            cJSON_AddNumberToObject(root, "udp_broadcast_port", GlobalConfig::instance().get_udp_broadcast_port());
+            */
             String json(cJSON_Print(root));
 
             // Free memory
@@ -351,6 +476,57 @@ void WebSocketServerTask::setupRESTAPI()
             {
                 // Not recording
                 m_webServer.send(400, "text/plain", "Not recording");
+            }
+        });
+
+
+    m_webServer.on(
+        "/start_streaming",
+        HTTP_GET,
+        [this]()
+        {
+            Serial.println("get: /start_streaming");
+            if (!m_webServer.hasArg("address") || !m_webServer.hasArg("port"))
+            {
+                m_webServer.send(400, "text/plain", "Missing arguments (address, port)");
+                return;
+            }
+            IPAddress udp_address;
+            if (!udp_address.fromString(m_webServer.arg("address")))
+            {
+                m_webServer.send(400, "text/plain", "Invalid address (expected x.x.x.x)");
+                return;
+            }
+            long udp_port = m_webServer.arg("port").toInt();
+            if (udp_port <= 0 || udp_port >= 0xFFFF)
+            {
+                m_webServer.send(400, "text/plain", "Invalid port");
+                return;
+            }
+
+            if (startUDPStreaming(uint32_t(udp_address), udp_port))
+            {
+                m_webServer.send(200, "text/plain", "OK");
+            }
+            else
+            {
+                m_webServer.send(400, "text/plain", "Already streaming");
+            }
+        });
+
+    m_webServer.on(
+        "/stop_streaming",
+        HTTP_GET,
+        [this]()
+        {
+            Serial.println("get: /stop_streaming");
+            if (stopUDPStreaming())
+            {
+                m_webServer.send(200, "text/plain", "OK");
+            }
+            else
+            {
+                m_webServer.send(400, "text/plain", "Not streaming");
             }
         });
 
