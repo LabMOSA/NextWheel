@@ -5,7 +5,8 @@ import setuptools
 with open("README.md") as fh:
     long_description = fh.read()
 
-version = "0.2.0"
+with open("nextwheel/VERSION") as fh:
+    version = fh.read()
 
 setuptools.setup(
     name="nextwheel",
@@ -29,7 +30,7 @@ setuptools.setup(
     },
     install_requires=["numpy", "matplotlib", "requests"],
     classifiers=[
-        "Development Status :: 2 - Pre-Alpha",
+        "Development Status :: 4 - Beta",
         "Intended Audience :: Science/Research",
         "License :: OSI Approved :: Apache Software License",
         "Natural Language :: English",
