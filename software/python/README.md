@@ -1,15 +1,17 @@
 # NextWheel Python module
 
-To install the Python module:
+This is the Python module for the [NextWheel project](https://github.com/LabMOSA/NextWheel) - Open design of next-generation instrumented wheelchair wheels
+
+To install:
 
 ```
-pip install git+https://github.com/felixchenier/NextWheel.git#subdirectory=software/python
+pip install nextwheel
 ```
 
-To upgrade the Python module:
+To upgrade:
 
 ```
-pip install --upgrade git+https://github.com/felixchenier/NextWheel.git#subdirectory=software/python
+pip install --upgrade nextwheel
 ```
 
 To use the module:
