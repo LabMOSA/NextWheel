@@ -30,7 +30,7 @@ setuptools.setup(
     },
     install_requires=["numpy", "matplotlib", "requests"],
     classifiers=[
-        "Development Status :: 2 - Pre-Alpha",
+        "Development Status :: 4 - Beta",
         "Intended Audience :: Science/Research",
         "License :: OSI Approved :: Apache Software License",
         "Natural Language :: English",
