@@ -1,3 +1,40 @@
+[build-system]
+requires = ["setuptools>=77.0.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nextwheel"
+dynamic = ["version"]
+description = "Python module for NextWheel instrumented wheels"
+readme = { file = "README.md", content-type = "text/markdown" }
+requires-python = ">=3.11"
+authors = [
+  { name = "NextWheel collaborators", email = "chenier.felix@uqam.ca" },
+]
+license = "Apache-2.0"
+license-files = ["LICENSE.txt", "NOTICE.txt"]
+dependencies = ["numpy", "matplotlib", "requests"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "Natural Language :: English",
+  "Operating System :: MacOS",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX",
+  "Programming Language :: Python :: 3",
+]
+
+[project.urls]
+Documentation = "https://github.com/LabMOSA/NextWheel/tree/master/python"
+Source = "https://github.com/LabMOSA/NextWheel"
+Tracker = "https://github.com/LabMOSA/NextWheel/issues"
+
+[tool.setuptools.dynamic]
+version = { file = "nextwheel/VERSION" }
+
+[tool.setuptools.packages.find]
+include = ["nextwheel*"]
+
 [tool.ruff]
 line-length = 79
 target-version = "py313"
